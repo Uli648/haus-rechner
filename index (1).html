@@ -1,0 +1,1040 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finanzierungsrechner</title>
+<link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#000;--bg1:#0a0a0a;--bg2:#111;--bg3:#1a1a1a;--bg4:#222;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+  --text:#f5f5f7;--text2:#a1a1a6;--text3:#6e6e73;
+  --blue:#2997ff;--blue-dim:rgba(41,151,255,0.12);
+  --green:#34c759;--green-dim:rgba(52,199,89,0.12);
+  --amber:#ff9f0a;--amber-dim:rgba(255,159,10,0.12);
+  --red:#ff453a;--red-dim:rgba(255,69,58,0.12);
+  --r:12px;--r2:18px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif;font-weight:400;line-height:1.5;min-height:100vh}
+
+/* ── LOCK SCREEN ── */
+#lock-screen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:flex;align-items:center;justify-content:center}
+.lock-box{width:340px;text-align:center}
+.lock-icon{width:72px;height:72px;margin:0 auto 32px;position:relative}
+.lock-ring{stroke-dasharray:188;stroke-dashoffset:188;animation:none;transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1)}
+.lock-ring.active{stroke-dashoffset:0}
+.lock-shackle{transform-origin:32px 22px;transition:transform .4s cubic-bezier(.4,0,.2,1)}
+.lock-shackle.open{transform:rotate(-40deg) translateY(-4px)}
+.lock-err-shake{animation:shake .4s cubic-bezier(.36,.07,.19,.97)}
+@keyframes shake{10%,90%{transform:translateX(-2px)}20%,80%{transform:translateX(4px)}30%,50%,70%{transform:translateX(-4px)}40%,60%{transform:translateX(4px)}}
+@keyframes unlockPulse{0%{opacity:1}50%{opacity:.4}100%{opacity:1}}
+.lock-box h2{font-size:22px;font-weight:500;margin-bottom:6px;letter-spacing:-.3px}
+.lock-box p{font-size:14px;color:var(--text2);margin-bottom:28px}
+.lock-input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:14px 16px;font-size:15px;color:var(--text);text-align:center;letter-spacing:3px;outline:none;font-family:inherit;transition:border-color .2s}
+.lock-input:focus{border-color:var(--blue)}
+.lock-btn{width:100%;margin-top:12px;background:var(--blue);border:none;border-radius:var(--r);padding:14px;font-size:15px;font-weight:500;color:#fff;cursor:pointer;font-family:inherit;transition:opacity .2s}
+.lock-btn:hover{opacity:.85}
+.lock-err{font-size:13px;color:var(--red);margin-top:10px;min-height:18px}
+.lock-change{font-size:13px;color:var(--text3);margin-top:20px;cursor:pointer;text-decoration:underline}
+.lock-change:hover{color:var(--text2)}
+
+/* ── APP ── */
+#app{display:none}
+.topbar{position:sticky;top:0;z-index:100;background:rgba(0,0,0,0.8);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 32px}
+.topbar-inner{max-width:820px;margin:0 auto;height:52px;display:flex;align-items:center;justify-content:space-between}
+.topbar-logo{font-size:15px;font-weight:500;letter-spacing:-.2px}
+.topbar-actions{display:flex;gap:8px}
+.tb-btn{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-size:13px;color:var(--text2);cursor:pointer;font-family:inherit;transition:all .2s}
+.tb-btn:hover{background:var(--bg4);color:var(--text);border-color:var(--border2)}
+.tb-btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.tb-btn.primary:hover{opacity:.85}
+
+.plan-titlebar{position:sticky;top:52px;z-index:90;background:rgba(0,0,0,0.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:40px 32px 0;text-align:center}
+.plan-titlebar h1{font-size:46px;font-weight:600;letter-spacing:-1.2px;line-height:1.1;background:linear-gradient(135deg,#f5f5f7 0%,#a1a1a6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0;cursor:pointer}
+.plan-titlebar h1:hover .edit-hint{opacity:1;font-size:22px}
+.cashflow-strip{padding:12px 32px 16px;display:flex;justify-content:center;align-items:center;gap:10px}
+.cs-label{font-size:13px;font-weight:500}
+.cs-label-pos{color:var(--green)}.cs-label-neg{color:var(--red)}
+.cs-val{font-size:24px;font-weight:600;letter-spacing:-.8px}
+.cs-val-pos{color:var(--green)}.cs-val-neg{color:var(--red)}
+.cs-sub{font-size:12px;opacity:.6}
+.cs-sub-pos{color:var(--green)}.cs-sub-neg{color:var(--red)}
+.edit-hint{font-size:14px;font-weight:400;color:var(--text3);-webkit-text-fill-color:var(--text3);margin-left:10px;opacity:0;transition:opacity .15s,font-size .15s;vertical-align:middle}
+.plan-subtitle{display:none}
+.plan-title-input{font-size:46px;font-weight:600;letter-spacing:-1.2px;background:transparent;border:none;border-bottom:2px solid var(--blue);color:var(--text);text-align:center;outline:none;width:100%;font-family:inherit;padding:0 0 4px}
+.section-header{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;margin:16px 0 8px;padding:2px 0}
+.section-header:hover .sec-label{color:var(--text2)}
+.section-toggle{font-size:11px;color:var(--text3);transition:transform .25s;display:inline-block;line-height:1}
+.section-toggle.open{transform:rotate(180deg)}
+.section-body{overflow:hidden;transition:max-height .3s cubic-bezier(.4,0,.2,1),opacity .25s;max-height:2000px;opacity:1}
+.section-body.collapsed{max-height:0;opacity:0}
+
+.main{max-width:820px;margin:0 auto;padding:32px 32px 80px}
+.section{margin-bottom:10px}
+.sec-label{font-size:11px;font-weight:500;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;padding-left:2px}
+
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:24px 28px;margin-bottom:10px;transition:border-color .2s}
+.card:hover{border-color:rgba(255,255,255,0.12)}
+
+.field-row{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.field-row:last-child{margin-bottom:0}
+.field-row label{font-size:13px;color:var(--text2);min-width:160px;flex-shrink:0}
+.field-row input[type=range]{flex:1;min-width:0;-webkit-appearance:none;appearance:none;height:4px;background:rgba(255,255,255,0.18);border-radius:2px;outline:none;cursor:pointer}
+.field-row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#fff;cursor:pointer;transition:transform .15s;box-shadow:0 0 0 3px rgba(41,151,255,0.25)}
+.field-row input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);box-shadow:0 0 0 5px rgba(41,151,255,0.35)}
+.sl-btn{background:none;border:none;color:rgba(255,255,255,0.3);font-size:18px;line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0;transition:color .15s;font-weight:300;width:20px;text-align:center;user-select:none}
+.sl-btn:hover{color:rgba(255,255,255,0.85)}
+.val-badge{font-size:13px;font-weight:500;min-width:108px;text-align:right;cursor:pointer;color:var(--text);border-bottom:1px dashed rgba(255,255,255,0.2);padding-bottom:1px;transition:color .2s}
+.val-badge:hover{color:var(--blue)}
+.inline-input{width:108px;font-size:13px;text-align:right;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:3px 10px;color:var(--text);outline:none;font-family:inherit}
+.inline-input:focus{border-color:var(--blue)}
+
+.metric{background:var(--bg3);border-radius:var(--r);padding:16px 18px;border:1px solid var(--border)}
+.metric .ml{font-size:11px;color:var(--text3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em}
+.metric .mv{font-size:20px;font-weight:500;letter-spacing:-.3px}
+.mv.blue{color:var(--blue)}.mv.amber{color:var(--amber)}.mv.green{color:var(--green)}.mv.red{color:var(--red)}
+
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+
+hr.div{border:none;border-top:1px solid var(--border);margin:28px 0}
+
+.gewerk-header{display:grid;grid-template-columns:1fr 130px 36px;gap:8px;margin-bottom:6px;padding:0 2px}
+.gewerk-header span{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.gewerk-row{display:grid;grid-template-columns:1fr 130px 36px;gap:8px;align-items:center;margin-bottom:8px}
+input.gw-name{font-size:13px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);width:100%;outline:none;font-family:inherit;transition:border-color .2s}
+input.gw-name:focus{border-color:var(--blue)}
+input.gw-amt{font-size:13px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);width:100%;text-align:right;outline:none;font-family:inherit;transition:border-color .2s}
+input.gw-amt:focus{border-color:var(--blue)}
+.rm-btn{background:none;border:1px solid var(--border);border-radius:8px;color:var(--text3);width:36px;height:36px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.rm-btn:hover{border-color:var(--red);color:var(--red)}
+.add-btn{width:100%;background:transparent;border:1px dashed rgba(255,255,255,0.15);border-radius:var(--r);padding:10px;font-size:13px;color:var(--text3);cursor:pointer;font-family:inherit;transition:all .2s;margin-top:4px}
+.add-btn:hover{border-color:var(--blue);color:var(--blue)}
+
+.kredit-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px 26px;margin-bottom:10px;transition:border-color .2s}
+.kredit-card.master{border-color:rgba(41,151,255,0.4)}
+.master-badge{display:inline-block;background:var(--blue-dim);color:var(--blue);font-size:10px;font-weight:500;padding:2px 8px;border-radius:6px;margin-left:8px;vertical-align:middle;letter-spacing:.04em}
+.kredit-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.kredit-header input[type=text]{font-size:14px;font-weight:500;border:none;background:transparent;color:var(--text);outline:none;width:220px;font-family:inherit}
+.rm-kredit{background:none;border:1px solid var(--border);border-radius:8px;color:var(--text3);padding:5px 12px;cursor:pointer;font-size:12px;font-family:inherit;transition:all .2s}
+.rm-kredit:hover{border-color:var(--red);color:var(--red)}
+.tilg-hint{font-size:11px;color:var(--text3);margin:-10px 0 12px;padding-left:182px}
+.rate-row{display:flex;gap:10px;flex-wrap:wrap;padding:12px 14px;background:var(--bg3);border-radius:var(--r);margin:4px 0 14px;border:1px solid var(--border)}
+.rate-pill{font-size:12px;display:flex;align-items:center;gap:5px;color:var(--text3)}
+.rate-pill .dot{width:6px;height:6px;border-radius:50%}
+.rate-pill strong{color:var(--text);font-weight:500}
+.rate-sep{font-size:12px;color:var(--text3)}
+
+.pm-wrap{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.pm-btn{background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text2);width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;flex-shrink:0;transition:all .2s}
+.pm-btn:hover{background:var(--bg4);border-color:var(--border2);color:var(--text)}
+.bar-wrap{flex:1}
+.seg-bar{height:4px;border-radius:2px;overflow:hidden;background:var(--bg4);display:flex}
+
+.cf-highlight{border-radius:var(--r2);padding:18px 22px;display:flex;justify-content:space-between;align-items:center;margin-top:14px;border:1px solid}
+.cf-pos{background:var(--green-dim);border-color:rgba(52,199,89,0.3)}
+.cf-neg{background:var(--red-dim);border-color:rgba(255,69,58,0.3)}
+.cf-label{font-size:13px;font-weight:500}
+.cf-label-pos{color:var(--green)}.cf-label-neg{color:var(--red)}
+.cf-sub{font-size:12px;margin-top:3px;opacity:.7}
+.cf-sub-pos{color:var(--green)}.cf-sub-neg{color:var(--red)}
+.cf-val{font-size:30px;font-weight:600;letter-spacing:-1px}
+.cf-val-pos{color:var(--green)}.cf-val-neg{color:var(--red)}
+
+.sf-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:0 26px;margin-bottom:10px}
+.sf-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)}
+.sf-row:last-child{border-bottom:none}
+.sf-label{font-size:13px;color:var(--text2)}
+.sf-val{font-size:13px;font-weight:500}
+.sf-total-label{font-size:14px;font-weight:500;color:var(--text)}
+.sf-total-val{font-size:18px;font-weight:600;color:var(--green)}
+
+.plan-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:10px}
+table.plan{width:100%;border-collapse:collapse;font-size:13px}
+table.plan th{text-align:left;color:var(--text3);font-weight:400;padding:12px 16px;border-bottom:1px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+table.plan td{padding:12px 16px;border-bottom:1px solid var(--border);color:var(--text)}
+table.plan tr:last-child td{border-bottom:none}
+table.plan tr:hover td{background:rgba(255,255,255,0.02)}
+
+.bew-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:24px 28px}
+.score-track{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;margin:10px 0 20px}
+.score-fill{height:100%;border-radius:2px;transition:width .6s cubic-bezier(.4,0,.2,1)}
+.bew-item{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.bew-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:6px}
+.bew-text{font-size:13px;line-height:1.6;color:var(--text2)}
+
+/* save/load modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);z-index:500;display:none;align-items:center;justify-content:center}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:28px;width:360px}
+.modal h3{font-size:17px;font-weight:500;margin-bottom:6px}
+.modal p{font-size:13px;color:var(--text2);margin-bottom:20px}
+.modal-actions{display:flex;gap:8px;flex-wrap:wrap}
+.modal textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:12px;font-size:12px;color:var(--text2);font-family:monospace;height:120px;resize:none;outline:none;margin-bottom:12px}
+.modal-close{background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;float:right;margin-top:-6px}
+
+@media(max-width:640px){
+  .g3,.g4{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hero h1{font-size:36px}
+  .hero p{font-size:16px}
+  .field-row{flex-wrap:wrap}
+  .field-row label{min-width:100%}
+  .tilg-hint{padding-left:0}
+  .plan-titlebar{padding:28px 16px 22px}
+  .plan-titlebar h1{font-size:30px}
+  .plan-title-input{font-size:28px}
+  .main{padding-left:16px;padding-right:16px}
+  .topbar{padding-left:16px;padding-right:16px}
+}
+.app-layout{display:flex;min-height:calc(100vh - 52px)}
+.sidebar{width:220px;flex-shrink:0;background:var(--bg1);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:20px 0;position:sticky;top:52px;height:calc(100vh - 52px);overflow:hidden}
+.sidebar-title{font-size:11px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;padding:0 18px 12px}
+.sidebar-plans{flex:1;overflow-y:auto}
+.plan-item{display:flex;align-items:center;padding:9px 18px;cursor:pointer;transition:background .15s;gap:8px}
+.plan-item:hover{background:var(--bg3)}
+.plan-item.active{background:var(--bg3);border-right:2px solid var(--blue)}
+.plan-item-name{flex:1;font-size:13px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plan-item.active .plan-item-name{color:var(--text)}
+.plan-del{background:none;border:none;color:var(--text3);cursor:pointer;font-size:15px;padding:0 2px;opacity:0;transition:opacity .15s;line-height:1}
+.plan-item:hover .plan-del{opacity:1}
+.plan-del:hover{color:var(--red)}
+.sidebar-new{background:transparent;border:1px dashed rgba(255,255,255,0.12);border-radius:var(--r);padding:8px;font-size:12px;color:var(--text3);cursor:pointer;font-family:inherit;width:100%;transition:all .2s}
+.sidebar-new:hover{border-color:var(--blue);color:var(--blue)}
+.sidebar-save{background:transparent;border:1px solid rgba(41,151,255,0.25);border-radius:var(--r);padding:8px;font-size:12px;color:var(--blue);cursor:pointer;font-family:inherit;width:100%;transition:all .2s}
+.sidebar-save:hover{background:var(--blue-dim);border-color:var(--blue)}
+.sidebar-lock{background:transparent;border:1px solid rgba(255,255,255,0.08);border-radius:var(--r);padding:8px;font-size:12px;color:var(--text3);cursor:pointer;font-family:inherit;width:100%;transition:all .2s}
+.sidebar-lock:hover{border-color:var(--red);color:var(--red)}
+.sidebar-empty{padding:12px 18px;font-size:12px;color:var(--text3);font-style:italic}
+.app-content{flex:1;min-width:0}
+.pw-step.hidden{display:none}
+.pw-success{color:var(--green);font-size:13px;margin-top:10px}
+@media(max-width:700px){.sidebar{display:none}.app-layout{display:block}}
+</style>
+</head>
+<body>
+
+<!-- LOCK -->
+<div id="lock-screen">
+  <div class="lock-box">
+    <div class="lock-icon">
+      <svg id="lock-svg" width="72" height="72" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="28" width="44" height="30" rx="8" fill="#1a1a1a" stroke="rgba(255,255,255,0.12)" stroke-width="1.5"/>
+        <circle cx="32" cy="43" r="4" fill="none" stroke="#2997ff" stroke-width="2" id="lock-dot" opacity="0"/>
+        <rect x="30.5" y="43" width="3" height="7" rx="1.5" fill="#2997ff" id="lock-pin" opacity="0"/>
+        <path id="lock-shackle" class="lock-shackle" d="M18 28V22C18 13.163 46 13.163 46 22V28" stroke="rgba(255,255,255,0.5)" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+        <circle cx="32" cy="32" r="30" fill="none" stroke="#2997ff" stroke-width="1.5" class="lock-ring" id="lock-ring" opacity="0.5"/>
+      </svg>
+    </div>
+    <h2>Finanzierungsrechner</h2>
+    <p id="lock-sub" style="font-size:14px;color:var(--text2);margin-bottom:28px">Bitte Passwort eingeben</p>
+    <input class="lock-input" type="password" id="pw-input" placeholder="••••••••" autocomplete="current-password">
+    <button class="lock-btn" onclick="checkPw()">Entsperren</button>
+    <div class="lock-err" id="lock-err"></div>
+
+    <div style="margin-top:28px;border-top:1px solid rgba(255,255,255,0.08);padding-top:22px">
+      <p style="font-size:11px;color:var(--text3);margin-bottom:16px;letter-spacing:.08em;text-transform:uppercase">Passwort ändern</p>
+      <div id="pw-slot">
+      </div>
+      <div class="lock-err" id="pw-flow-err"></div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <span class="topbar-logo"></span>
+      <div class="topbar-actions">
+      </div>
+    </div>
+  </div>
+  <div class="app-layout">
+    <div class="sidebar">
+      <p class="sidebar-title">Meine Pläne</p>
+      <div class="sidebar-plans" id="sidebar-plans">
+        <p class="sidebar-empty" id="sidebar-empty">Noch keine Pläne</p>
+      </div>
+      <div style="padding:10px 18px 16px;display:flex;flex-direction:column;gap:8px">
+        <button class="sidebar-new" onclick="newPlan()">+ Neuer Plan</button>
+        <button class="sidebar-save" onclick="saveCurrentPlan()">↓ Plan speichern</button>
+        <button class="sidebar-lock" onclick="lockApp()">⏻ Sperren</button>
+      </div>
+    </div>
+    <div class="app-content">
+      <div class="plan-titlebar">
+        <h1 id="plan-title" onclick="renamePlan()">Ihre Immobilienfinanzierung<span class="edit-hint">✎</span></h1>
+        <p class="plan-subtitle" id="plan-subtitle">Professionelle Investmentanalyse auf einen Blick</p>
+        <div class="cashflow-strip" id="cf-strip"></div>
+      </div>
+      <div class="main">
+
+    <div class="section-header" onclick="toggleSection('sec-kaufpreis',this)">
+      <p class="sec-label" style="margin:0">Kaufpreis &amp; Kosten</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-kaufpreis">
+    <div class="card">
+      <div class="field-row"><label>Kaufpreis</label><button class="sl-btn" onclick="stepSlider('kaufpreis',-5000)">−</button><input type="range" id="kaufpreis" min="50000" max="2000000" step="5000" value="400000"><button class="sl-btn" onclick="stepSlider('kaufpreis',5000)">+</button><span class="val-badge" id="lbl-kaufpreis" onclick="mkEdit(this,'kaufpreis',50000,2000000,5000,'€')">400.000 €</span></div>
+      <div class="field-row"><label>Eigenkapital</label><button class="sl-btn" onclick="stepSlider('eigen',-5000)">−</button><input type="range" id="eigen" min="0" max="500000" step="5000" value="80000"><button class="sl-btn" onclick="stepSlider('eigen',5000)">+</button><span class="val-badge" id="lbl-eigen" onclick="mkEdit(this,'eigen',0,500000,5000,'€')">80.000 €</span></div>
+      <div class="field-row"><label>Nebenkosten</label><button class="sl-btn" onclick="stepSlider('nk',-0.1)">−</button><input type="range" id="nk" min="1.5" max="15" step="0.1" value="10"><button class="sl-btn" onclick="stepSlider('nk',0.1)">+</button><span class="val-badge" id="lbl-nk" onclick="mkEdit(this,'nk',1.5,15,0.1,'%')">10,00 %</span></div>
+      <div class="field-row"><label>Gebäudeanteil (AfA)</label><button class="sl-btn" onclick="stepSlider('afa-ant',-1)">−</button><input type="range" id="afa-ant" min="50" max="95" step="1" value="80"><button class="sl-btn" onclick="stepSlider('afa-ant',1)">+</button><span class="val-badge" id="lbl-afa-ant" onclick="mkEdit(this,'afa-ant',50,95,1,'%')">80,00 %</span></div>
+    </div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-gewerke',this)">
+      <p class="sec-label" style="margin:0">Zusätzliche Gewerke</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-gewerke">
+    <div class="card">
+      <div class="gewerk-header">
+        <span>Gewerk</span><span style="text-align:right">Betrag</span><span></span>
+      </div>
+      <div id="gewerke-list"></div>
+      <button class="add-btn" onclick="addGewerk()">+ Gewerk hinzufügen</button>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px;font-size:13px;color:var(--text3)">Gesamt: <strong style="margin-left:8px;color:var(--text)" id="gewerk-total">0 €</strong></div>
+    </div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-miete',this)">
+      <p class="sec-label" style="margin:0">Mieteinnahmen &amp; Cashflow</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-miete">
+    <div class="card">
+      <div class="field-row"><label>Monatliche Kaltmiete</label><button class="sl-btn" onclick="stepSlider('miete',-50)">−</button><input type="range" id="miete" min="0" max="5000" step="50" value="1200"><button class="sl-btn" onclick="stepSlider('miete',50)">+</button><span class="val-badge" id="lbl-miete" onclick="mkEdit(this,'miete',0,5000,50,'€')">1.200 €</span></div>
+      <div class="field-row"><label>Rückstellung Sanierung</label><button class="sl-btn" onclick="stepSlider('rueck',-0.1)">−</button><input type="range" id="rueck" min="0" max="30" step="0.1" value="10"><button class="sl-btn" onclick="stepSlider('rueck',0.1)">+</button><span class="val-badge" id="lbl-rueck" onclick="mkEdit(this,'rueck',0,30,0.1,'%')">10,00 %</span></div>
+      <div class="field-row"><label>Leerstandsrisiko</label><button class="sl-btn" onclick="stepSlider('leerstand',-0.1)">−</button><input type="range" id="leerstand" min="0" max="15" step="0.1" value="4"><button class="sl-btn" onclick="stepSlider('leerstand',0.1)">+</button><span class="val-badge" id="lbl-leerstand" onclick="mkEdit(this,'leerstand',0,15,0.1,'%')">4,00 %</span></div>
+      <div class="g3" style="margin-top:16px">
+        <div class="metric"><p class="ml">Nettomiete / Mo.</p><p class="mv blue" id="out-nettomiete">—</p></div>
+        <div class="metric"><p class="ml">Rückstellung / Mo.</p><p class="mv amber" id="out-rueckstellung">—</p></div>
+        <div class="metric"><p class="ml">Kreditrate gesamt</p><p class="mv red" id="out-totalrate">—</p></div>
+      </div>
+      <div id="cashflow-highlight"></div>
+    </div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-kredite',this)">
+      <p class="sec-label" style="margin:0">Kredite</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-kredite">
+    <div id="master-kredit-wrap"></div>
+    <div id="kredite-list"></div>
+    <button class="add-btn" onclick="addKredit()">+ Zusatzkredit hinzufügen</button>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-uebersicht',this)">
+      <p class="sec-label" style="margin:0">Finanzierungsübersicht</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-uebersicht">
+    <div class="g4" id="metrics-grid"></div>
+    <div style="margin:0 0 12px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:5px"><span id="bar-ek-lbl">—</span><span id="bar-debt-lbl">—</span></div>
+      <div class="seg-bar">
+        <div id="bar-ek" style="background:var(--green);height:100%;transition:width .3s"></div>
+        <div id="bar-debt" style="background:var(--blue);height:100%;transition:width .3s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:4px"><span>Eigenkapital</span><span>Fremdkapital</span></div>
+    </div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-rendite',this)">
+      <p class="sec-label" style="margin:0">Renditekennzahlen</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-rendite">
+    <div class="g4" id="rendite-grid"></div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-cfdetail',this)">
+      <p class="sec-label" style="margin:0">Cashflow-Aufschlüsselung</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-cfdetail">
+    <div class="card" id="cashflow-detail" style="padding:0 28px"></div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-schulden',this)">
+      <p class="sec-label" style="margin:0">Vollständige Schuldentilgung</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-schulden">
+    <div class="sf-box" id="schuldenfrei-box"></div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-tilgung',this)">
+      <p class="sec-label" style="margin:0">Tilgungsplan</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-tilgung">
+    <div class="plan-wrap">
+      <table class="plan"><thead><tr><th>Jahr</th><th>Rate / Jahr</th><th>Zinsen</th><th>Tilgung</th><th>Restschuld</th></tr></thead>
+      <tbody id="plan-body"></tbody></table>
+    </div>
+    </div>
+
+    <div class="section-header" onclick="toggleSection('sec-bewertung',this)">
+      <p class="sec-label" style="margin:0">Investmentbewertung</p>
+      <span class="section-toggle open">▾</span>
+    </div>
+    <div class="section-body" id="sec-bewertung">
+    <div class="bew-wrap" id="bewertung-box"></div>
+    </div>
+
+      </div><!-- /.main -->
+    </div><!-- /.app-content -->
+  </div><!-- /.app-layout -->
+</div><!-- /#app -->
+
+<!-- SAVE NAME MODAL -->
+<div class="modal-bg" id="save-name-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal('save-name-modal')">×</button>
+    <h3>Plan benennen</h3>
+    <p>Geben Sie diesem Finanzierungsplan einen Namen.</p>
+    <input type="text" id="plan-name-input" placeholder="z.B. Hauptstraße 12, München" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px;font-size:14px;color:var(--text);outline:none;font-family:inherit;margin-bottom:16px">
+    <div class="modal-actions">
+      <button class="tb-btn primary" onclick="confirmSavePlan()">Speichern</button>
+      <button class="tb-btn" onclick="closeModal('save-name-modal')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+
+<script>
+/* ═══════════════════════ AUTH ═══════════════════════ */
+const DEFAULT_PW='2511';
+function getStoredPw(){return localStorage.getItem('fin_pw')||DEFAULT_PW;}
+
+function checkPw(){
+  const v=document.getElementById('pw-input').value;
+  if(v===getStoredPw()){
+    const ring=document.getElementById('lock-ring');
+    const shackle=document.getElementById('lock-shackle');
+    const dot=document.getElementById('lock-dot');
+    const pin=document.getElementById('lock-pin');
+    if(ring)ring.classList.add('active');
+    if(shackle)shackle.classList.add('open');
+    setTimeout(()=>{if(dot)dot.setAttribute('opacity','1');if(pin)pin.setAttribute('opacity','1');},400);
+    setTimeout(()=>{
+      document.getElementById('lock-screen').style.display='none';
+      document.getElementById('app').style.display='block';
+      renderSidebar();loadAutoSave();
+    },700);
+  } else {
+    document.getElementById('lock-err').textContent='Falsches Passwort.';
+    document.getElementById('pw-input').value='';
+    const box=document.querySelector('.lock-box');
+    box.classList.remove('lock-err-shake');void box.offsetWidth;box.classList.add('lock-err-shake');
+    const shackle=document.getElementById('lock-shackle');
+    if(shackle){shackle.setAttribute('stroke','#ff453a');setTimeout(()=>shackle.setAttribute('stroke','rgba(255,255,255,0.5)'),500);}
+  }
+}
+document.getElementById('pw-input').addEventListener('keydown',e=>{if(e.key==='Enter')checkPw();});
+document.getElementById('pw-input').addEventListener('focus',()=>{const r=document.getElementById('lock-ring');if(r&&!r.classList.contains('active'))r.style.opacity='0.9';});
+document.getElementById('pw-input').addEventListener('blur',()=>{const r=document.getElementById('lock-ring');if(r&&!r.classList.contains('active'))r.style.opacity='0.5';});
+
+function lockApp(){
+  document.getElementById('app').style.display='none';
+  document.getElementById('lock-screen').style.display='flex';
+  document.getElementById('pw-input').value='';
+  document.getElementById('lock-err').textContent='';
+  resetPwSteps();
+  const ring=document.getElementById('lock-ring');const shackle=document.getElementById('lock-shackle');
+  const dot=document.getElementById('lock-dot');const pin=document.getElementById('lock-pin');
+  if(ring){ring.classList.remove('active');ring.style.opacity='0.5';}
+  if(shackle){shackle.classList.remove('open');shackle.setAttribute('stroke','rgba(255,255,255,0.5)');}
+  if(dot)dot.setAttribute('opacity','0');if(pin)pin.setAttribute('opacity','0');
+}
+
+/* ── Step-by-step password change (single slot) ── */
+let _newPw='';
+function setPwErr(msg,isOk){
+  const el=document.getElementById('pw-flow-err');
+  el.textContent=msg;
+  el.style.color=isOk?'var(--green)':'var(--red)';
+}
+function setSlot(html){
+  document.getElementById('pw-slot').innerHTML=html;
+  const inp=document.querySelector('#pw-slot input');
+  if(inp)setTimeout(()=>inp.focus(),40);
+}
+function resetPwSteps(){
+  _newPw='';setPwErr('','');
+  setSlot(`<input class="lock-input" type="password" id="old-pw-input" placeholder="Aktuelles Passwort">
+    <button class="lock-btn" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text2);margin-top:10px" onclick="verifyOldPw()">Weiter</button>`);
+  document.querySelector('#pw-slot input').addEventListener('keydown',e=>{if(e.key==='Enter')verifyOldPw();});
+}
+function verifyOldPw(){
+  const v=document.querySelector('#pw-slot input')?.value||'';
+  if(v!==getStoredPw()){setPwErr('Falsches Passwort.');return;}
+  setPwErr('');
+  setSlot(`<input class="lock-input" type="password" id="new-pw1" placeholder="Neues Passwort">
+    <button class="lock-btn" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text2);margin-top:10px" onclick="goToStep3()">Weiter</button>`);
+  document.querySelector('#pw-slot input').addEventListener('keydown',e=>{if(e.key==='Enter')goToStep3();});
+}
+function goToStep3(){
+  const v=document.querySelector('#pw-slot input')?.value||'';
+  if(v.length<2){setPwErr('Mindestens 2 Zeichen.');return;}
+  _newPw=v;setPwErr('');
+  setSlot(`<input class="lock-input" type="password" placeholder="Passwort wiederholen">
+    <button class="lock-btn" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text2);margin-top:10px" onclick="savePwFinal()">Speichern</button>`);
+  document.querySelector('#pw-slot input').addEventListener('keydown',e=>{if(e.key==='Enter')savePwFinal();});
+}
+function savePwFinal(){
+  const v=document.querySelector('#pw-slot input')?.value||'';
+  if(v!==_newPw){setPwErr('Passwörter stimmen nicht überein.');return;}
+  localStorage.setItem('fin_pw',_newPw);_newPw='';
+  setPwErr('Passwort gespeichert ✓',true);
+  setSlot(`<button class="lock-btn" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text2)" onclick="resetPwSteps()">Neues Passwort ändern</button>`);
+}
+
+function setPlanTitle(name){
+  const h=document.getElementById('plan-title');
+  const s=document.getElementById('plan-subtitle');
+  if(h)h.innerHTML=(name||'Ihre Immobilienfinanzierung')+'<span class="edit-hint">✎</span>';
+  if(s)s.style.display='none';
+}
+
+function renamePlan(){
+  if(!activePlanId)return;
+  const h=document.getElementById('plan-title');
+  const current=getPlans().find(p=>p.id===activePlanId)?.name||'';
+  const inp=document.createElement('input');
+  inp.className='plan-title-input';
+  inp.value=current;
+  h.replaceWith(inp);
+  inp.focus();inp.select();
+  function commit(){
+    const name=inp.value.trim()||current;
+    const plans=getPlans();
+    const idx=plans.findIndex(p=>p.id===activePlanId);
+    if(idx>=0){plans[idx].name=name;savePlans(plans);renderSidebar();}
+    const newH=document.createElement('h1');
+    newH.id='plan-title';newH.onclick=renamePlan;
+    newH.innerHTML=name+'<span class="edit-hint">✎</span>';
+    inp.replaceWith(newH);
+  }
+  inp.addEventListener('blur',commit);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=current;inp.blur();}});
+}
+let activePlanId=null;
+function getPlans(){try{return JSON.parse(localStorage.getItem('fin_plans')||'[]');}catch{return[];}}
+function savePlans(p){localStorage.setItem('fin_plans',JSON.stringify(p));}
+
+function renderSidebar(){
+  const plans=getPlans();
+  const container=document.getElementById('sidebar-plans');
+  container.innerHTML='';
+  if(plans.length===0){
+    const e=document.createElement('p');
+    e.className='sidebar-empty';e.textContent='Noch keine Pläne';
+    container.appendChild(e);return;
+  }
+  plans.forEach(p=>{
+    const div=document.createElement('div');
+    div.className='plan-item'+(activePlanId===p.id?' active':'');
+    div.dataset.id=p.id;
+
+    const name=document.createElement('span');
+    name.className='plan-item-name';name.title=p.name;name.textContent=p.name;
+
+    const del=document.createElement('button');
+    del.className='plan-del';del.textContent='×';del.title='Löschen';
+    del.dataset.del=p.id;
+
+    div.appendChild(name);div.appendChild(del);
+    container.appendChild(div);
+  });
+
+  container.onclick=function(e){
+    const del=e.target.closest('[data-del]');
+    if(del){deletePlan(del.dataset.del);return;}
+    const item=e.target.closest('[data-id]');
+    if(item){loadPlan(item.dataset.id);}
+  };
+}
+
+function saveCurrentPlan(){
+  const inp=document.getElementById('plan-name-input');
+  if(inp){
+    const existing=activePlanId?getPlans().find(p=>p.id===activePlanId):null;
+    inp.value=existing?existing.name:'';
+    inp.onkeydown=e=>{if(e.key==='Enter')confirmSavePlan();};
+  }
+  document.getElementById('save-name-modal').classList.add('open');
+  setTimeout(()=>{const i=document.getElementById('plan-name-input');if(i)i.focus();},100);
+}
+
+function confirmSavePlan(){
+  const name=(document.getElementById('plan-name-input').value||'').trim();
+  if(!name)return;
+  const plans=getPlans();
+  const state=getState();
+  if(activePlanId){
+    const idx=plans.findIndex(p=>p.id===activePlanId);
+    if(idx>=0){
+      plans[idx]={id:activePlanId,name,state};
+      savePlans(plans);setPlanTitle(name);renderSidebar();closeModal('save-name-modal');return;
+    }
+  }
+  const id='plan_'+Date.now();
+  activePlanId=id;
+  plans.push({id,name,state});
+  savePlans(plans);setPlanTitle(name);renderSidebar();closeModal('save-name-modal');
+}
+
+function loadPlan(id){
+  const plan=getPlans().find(p=>p.id===id);
+  if(!plan)return;
+  activePlanId=id;
+  applyState(plan.state);
+  setPlanTitle(plan.name);
+  renderSidebar();
+}
+
+function deletePlan(id){
+  const plans=getPlans().filter(p=>p.id!==id);
+  savePlans(plans);
+  if(activePlanId===id)activePlanId=null;
+  renderSidebar();
+}
+
+function newPlan(){
+  activePlanId=null;
+  setPlanTitle(null);
+  resetCalc();
+  renderSidebar();
+}
+
+function resetCalc(){
+  gewerke=[];kredite=[];gkId=0;krId=0;
+  masterZins=0;masterTilgPct=0;masterLaufzeit=20;masterTilgMode='pct';masterTilgEuroVal=null;
+  document.getElementById('gewerke-list').innerHTML='';
+  document.getElementById('kredite-list').innerHTML='';
+  document.getElementById('master-kredit-wrap').innerHTML='';
+  ['kaufpreis','eigen','nk','afa-ant','miete','rueck','leerstand'].forEach(id=>{
+    const sl=document.getElementById(id);const lb=document.getElementById('lbl-'+id);
+    const zeros={kaufpreis:0,eigen:0,nk:0,'afa-ant':0,miete:0,rueck:0,leerstand:0};
+    if(sl)sl.value=zeros[id];
+    if(lb&&!lb.matches('input'))lb.textContent=['nk','afa-ant','rueck','leerstand'].includes(id)?fmtP(0):fmtE(0);
+  });
+  buildMasterCard();
+  calc();
+}
+
+/* ═══════════════════════ STATE ═══════════════════════ */
+function getState(){
+  return{
+    kaufpreis:getV('kaufpreis'),eigen:getV('eigen'),nk:getV('nk'),afaAnt:getV('afa-ant'),
+    miete:getV('miete'),rueck:getV('rueck'),leerstand:getV('leerstand'),
+    masterZins,masterTilgPct,masterLaufzeit,masterTilgMode,masterTilgEuroVal,
+    gewerke:gewerke.map(g=>({name:g.name,betrag:g.betrag})),
+    kredite:kredite.map(k=>({label:k.label,betrag:k.betrag,zins:k.zins,tilgPct:k.tilgPct,laufzeit:k.laufzeit,tilgMode:k.tilgMode,tilgEuroVal:k.tilgEuroVal}))
+  };
+}
+function loadAutoSave(){
+  const plans=getPlans();
+  if(plans.length>0){
+    const last=plans[plans.length-1];
+    activePlanId=last.id;
+    loadPlan(activePlanId);
+  }
+}
+function applyState(s){
+  try{
+    const d=(typeof s==='string')?JSON.parse(s):s;
+    const map={kaufpreis:'kaufpreis',eigen:'eigen',nk:'nk','afa-ant':'afaAnt',miete:'miete',rueck:'rueck',leerstand:'leerstand'};
+    Object.entries(map).forEach(([id,key])=>{
+      if(d[key]!==undefined){const sl=document.getElementById(id);if(sl)sl.value=d[key];}
+    });
+    masterZins=d.masterZins!==undefined?d.masterZins:3.5;
+    masterTilgPct=d.masterTilgPct!==undefined?d.masterTilgPct:2.0;
+    masterLaufzeit=d.masterLaufzeit!==undefined?d.masterLaufzeit:30;
+    masterTilgMode=d.masterTilgMode||'pct';
+    masterTilgEuroVal=d.masterTilgEuroVal!=null?d.masterTilgEuroVal:null;
+    gewerke=[];kredite=[];gkId=0;krId=0;
+    document.getElementById('gewerke-list').innerHTML='';
+    document.getElementById('kredite-list').innerHTML='';
+    document.getElementById('master-kredit-wrap').innerHTML='';
+    (d.gewerke||[]).forEach(g=>addGewerk(g.name,g.betrag));
+    buildMasterCard();
+    (d.kredite||[]).forEach(k=>addKredit(k.label,k.betrag,k.zins,k.tilgPct,k.laufzeit));
+    calc();
+  }catch(e){console.error('applyState error:',e);}
+}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');}));
+
+/* ═══════════════════════ COLLAPSIBLE SECTIONS ═══════════════════════ */
+function toggleSection(id,header){
+  const body=document.getElementById(id);
+  const toggle=header.querySelector('.section-toggle');
+  const collapsed=body.classList.toggle('collapsed');
+  toggle.classList.toggle('open',!collapsed);
+}
+
+/* ═══════════════════════ CALC ENGINE ═══════════════════════ */
+const fmtE=v=>Math.round(v).toLocaleString('de-DE')+' €';
+const fmtP=v=>parseFloat(v).toFixed(2).replace('.',',')+' %';
+let gewerke=[],kredite=[],gkId=0,krId=0;
+let masterZins=3.5,masterTilgPct=2.0,masterLaufzeit=30,masterTilgMode='pct',masterTilgEuroVal=null;
+
+function getV(id){return parseFloat(document.getElementById(id).value)||0;}
+
+function stepSlider(id,step){
+  const sl=document.getElementById(id);
+  let v=Math.min(parseFloat(sl.max),Math.max(parseFloat(sl.min),parseFloat(sl.value)+step));
+  sl.value=v;
+  const lb=document.getElementById('lbl-'+id);
+  if(lb&&!lb.matches('input'))lb.textContent=['nk','afa-ant','rueck','leerstand'].includes(id)?fmtP(v):fmtE(v);
+  calc();
+}
+function stepMaster(field,step){
+  const sl=document.getElementById('msl-'+field);if(!sl)return;
+  let v=Math.min(parseFloat(sl.max),Math.max(parseFloat(sl.min),parseFloat(sl.value)+step));
+  v=parseFloat(v.toFixed(field==='laufzeit'?0:1));
+  sl.value=v;syncM(field,v);
+}
+function stepKr(kId,field,step){
+  const sl=document.getElementById('ksl-'+kId+'-'+field);if(!sl)return;
+  let v=Math.min(parseFloat(sl.max),Math.max(parseFloat(sl.min),parseFloat(sl.value)+step));
+  v=parseFloat(v.toFixed(field==='laufzeit'?0:(field==='betrag'?0:1)));
+  sl.value=v;syncKr(kId,field,v);
+}
+
+function mkEdit(el,sid,min,max,step,unit){
+  const sl=document.getElementById(sid);const cur=parseFloat(sl.value);
+  const inp=document.createElement('input');inp.type='number';inp.className='inline-input';
+  inp.value=cur;inp.min=min;inp.max=max;inp.step=step;
+  el.replaceWith(inp);inp.focus();inp.select();
+  function done(){
+    let v=parseFloat(inp.value);if(isNaN(v))v=cur;v=Math.min(max,Math.max(min,v));sl.value=v;
+    const b=document.createElement('span');b.className='val-badge';b.id='lbl-'+sid;
+    b.onclick=function(){mkEdit(this,sid,min,max,step,unit);};
+    b.textContent=unit==='%'?fmtP(v):fmtE(v);inp.replaceWith(b);calc();
+  }
+  inp.addEventListener('blur',done);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=cur;inp.blur();}});
+}
+
+function mkMasterEdit(el,field){
+  const specs={zins:[0.5,8,0.1,'%'],tilgPct:[0.5,6,0.1,'%'],tilgEuro:[0,9999,50,'€'],laufzeit:[5,40,1,'J']};
+  const [min,max,step,unit]=specs[field];
+  const mb=calcMasterBetrag();
+  const cur=field==='zins'?masterZins:field==='tilgPct'?masterTilgPct:field==='tilgEuro'?(masterTilgEuroVal!==null?masterTilgEuroVal:Math.round(mb*masterTilgPct/100/12)):masterLaufzeit;
+  const inp=document.createElement('input');inp.type='number';inp.className='inline-input';
+  inp.value=cur;inp.min=min;inp.max=max;inp.step=step;
+  el.replaceWith(inp);inp.focus();inp.select();
+  function done(){
+    let v=parseFloat(inp.value);if(isNaN(v))v=cur;v=Math.min(max,Math.max(min,v));
+    if(field==='zins')masterZins=v;
+    else if(field==='tilgPct'){masterTilgPct=v;masterTilgMode='pct';masterTilgEuroVal=null;}
+    else if(field==='tilgEuro'){masterTilgEuroVal=v;masterTilgMode='euro';}
+    else masterLaufzeit=v;
+    const sl=document.getElementById('msl-'+field);if(sl)sl.value=Math.min(v,field==='tilgEuro'?5000:v);
+    const b=document.createElement('span');b.className='val-badge';b.id='mlbl-'+field;
+    b.onclick=function(){mkMasterEdit(this,field);};
+    b.textContent=unit==='%'?fmtP(v):unit==='€'?fmtE(v):v+' Jahre';
+    inp.replaceWith(b);calc();
+  }
+  inp.addEventListener('blur',done);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=cur;inp.blur();}});
+}
+
+function mkKreditEdit(el,kId,field){
+  const k=kredite.find(x=>x.id===kId);if(!k)return;
+  const specs={betrag:[5000,500000,5000,'€'],zins:[0.5,8,0.1,'%'],tilgPct:[0.5,6,0.1,'%'],tilgEuro:[0,9999,50,'€'],laufzeit:[5,40,1,'J']};
+  const [min,max,step,unit]=specs[field];
+  const cur=field==='tilgEuro'?(k.tilgEuroVal!=null?k.tilgEuroVal:Math.round((k.betrag||0)*k.tilgPct/100/12)):
+            field==='tilgPct'?k.tilgPct:field==='zins'?k.zins:field==='laufzeit'?k.laufzeit:k.betrag;
+  const inp=document.createElement('input');inp.type='number';inp.className='inline-input';
+  inp.value=cur;inp.min=min;inp.max=max;inp.step=step;
+  el.replaceWith(inp);inp.focus();inp.select();
+  function done(){
+    let v=parseFloat(inp.value);if(isNaN(v))v=cur;v=Math.min(max,Math.max(min,v));
+    if(field==='tilgPct'){k.tilgPct=v;k.tilgMode='pct';k.tilgEuroVal=null;}
+    else if(field==='tilgEuro'){k.tilgEuroVal=v;k.tilgMode='euro';}
+    else k[field]=v;
+    const sl=document.getElementById('ksl-'+kId+'-'+field);if(sl)sl.value=Math.min(v,field==='tilgEuro'?5000:v);
+    const b=document.createElement('span');b.className='val-badge';b.id='klbl-'+kId+'-'+field;b.style.minWidth='90px';
+    b.onclick=function(){mkKreditEdit(this,kId,field);};
+    b.textContent=unit==='%'?fmtP(v):unit==='€'?fmtE(v):v+' Jahre';
+    inp.replaceWith(b);calc();
+  }
+  inp.addEventListener('blur',done);
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=cur;inp.blur();}});
+}
+
+function calcMasterBetrag(){
+  const kp=getV('kaufpreis'),eg=getV('eigen'),nkR=getV('nk')/100;
+  const gw=gewerke.reduce((s,g)=>s+(parseFloat(g.betrag)||0),0);
+  const zk=kredite.reduce((s,k)=>s+(parseFloat(k.betrag)||0),0);
+  return Math.max(0,kp*(1+nkR)+gw-eg-zk);
+}
+function resolveKreditTilg(k){
+  const b=parseFloat(k.betrag)||0;
+  if(k.tilgMode==='euro'&&k.tilgEuroVal!=null){
+    const pct=b>0?Math.min(6,Math.max(0.5,parseFloat((k.tilgEuroVal*12/b*100).toFixed(2)))):k.tilgPct;
+    return{pct,euro:k.tilgEuroVal};
+  }
+  return{pct:k.tilgPct,euro:Math.round(b*k.tilgPct/100/12)};
+}
+function calcSFJahre(betrag,zins,tilgPct){
+  if(!betrag||!tilgPct)return null;
+  const zr=zins/100,tr=tilgPct/100,mr=betrag*(zr+tr)/12;
+  if(mr<=betrag*zr/12)return null;
+  let rest=betrag,y=0;
+  while(rest>0&&y<200){for(let m=0;m<12;m++){rest=Math.max(0,rest-(mr-rest*zr/12));if(rest<=0)break;}y++;}
+  return rest<=0?y:null;
+}
+
+function buildMasterCard(){
+  const wrap=document.getElementById('master-kredit-wrap');wrap.innerHTML='';
+  const div=document.createElement('div');div.className='kredit-card master';
+  const mb=calcMasterBetrag(),initE=Math.round(mb*masterTilgPct/100/12);
+  masterTilgEuroVal=initE;
+  const initZe=Math.round(mb*masterZins/100/12);
+  div.innerHTML=`<div class="kredit-header">
+    <div style="display:flex;align-items:center"><span style="font-size:14px;font-weight:500">Hausbank (Hauptkredit)</span><span class="master-badge">Auto</span></div>
+  </div>
+  <div style="font-size:22px;font-weight:600;color:var(--blue);letter-spacing:-.5px;padding:4px 0 2px" id="master-betrag-display">${fmtE(mb)}</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:16px">= Gesamtinvestition − Eigenkapital − Zusatzkredite</div>
+  <div class="field-row"><label>Zinssatz p.a.</label><button class="sl-btn" onclick="stepMaster('zins',-0.1)">−</button><input type="range" id="msl-zins" min="0.5" max="8" step="0.1" value="${masterZins}" oninput="syncM('zins',this.value)"><button class="sl-btn" onclick="stepMaster('zins',0.1)">+</button><span class="val-badge" id="mlbl-zins" onclick="mkMasterEdit(this,'zins')">${fmtP(masterZins)}</span></div>
+  <div class="field-row"><label>Tilgung p.a. (%)</label><button class="sl-btn" onclick="stepMaster('tilgPct',-0.1)">−</button><input type="range" id="msl-tilgPct" min="0.5" max="6" step="0.1" value="${masterTilgPct}" oninput="syncM('tilgPct',this.value)"><button class="sl-btn" onclick="stepMaster('tilgPct',0.1)">+</button><span class="val-badge" id="mlbl-tilgPct" onclick="mkMasterEdit(this,'tilgPct')">${fmtP(masterTilgPct)}</span></div>
+  <div class="field-row"><label>Tilgung / Monat (€)</label><button class="sl-btn" onclick="stepMaster('tilgEuro',-50)">−</button><input type="range" id="msl-tilgEuro" min="0" max="5000" step="50" value="${initE}" oninput="syncM('tilgEuro',this.value)"><button class="sl-btn" onclick="stepMaster('tilgEuro',50)">+</button><span class="val-badge" id="mlbl-tilgEuro" onclick="mkMasterEdit(this,'tilgEuro')">${fmtE(initE)}</span></div>
+  <div class="tilg-hint">zuletzt geändert gilt — % und € sind verknüpft</div>
+  <div class="rate-row">
+    <div class="rate-pill"><div class="dot" style="background:var(--blue)"></div><span>Tilgung</span>&nbsp;<strong id="ms-te">${fmtE(initE)}</strong></div>
+    <span class="rate-sep">+</span>
+    <div class="rate-pill"><div class="dot" style="background:var(--amber)"></div><span>Zinsen</span>&nbsp;<strong id="ms-ze">${fmtE(initZe)}</strong></div>
+    <span class="rate-sep">=</span>
+    <div class="rate-pill"><strong id="ms-re">${fmtE(initE+initZe)} / Mo.</strong></div>
+  </div>
+  <div class="field-row"><label>Laufzeit</label><button class="sl-btn" onclick="stepMaster('laufzeit',-1)">−</button><input type="range" id="msl-laufzeit" min="5" max="40" step="1" value="${masterLaufzeit}" oninput="syncM('laufzeit',this.value)"><button class="sl-btn" onclick="stepMaster('laufzeit',1)">+</button><span class="val-badge" id="mlbl-laufzeit" onclick="mkMasterEdit(this,'laufzeit')">${masterLaufzeit} Jahre</span></div>`;
+  wrap.appendChild(div);
+}
+
+function syncM(field,val){
+  const v=parseFloat(val);
+  if(field==='zins')masterZins=v;
+  else if(field==='tilgPct'){masterTilgPct=v;masterTilgMode='pct';masterTilgEuroVal=null;}
+  else if(field==='tilgEuro'){masterTilgEuroVal=v;masterTilgMode='euro';}
+  else masterLaufzeit=v;
+  const lb=document.getElementById('mlbl-'+field);
+  if(lb&&!lb.matches('input'))lb.textContent=field==='laufzeit'?v+' Jahre':field==='tilgEuro'?fmtE(v):fmtP(v);
+  calc();
+}
+function syncKr(kId,field,val){
+  const k=kredite.find(x=>x.id===kId);if(!k)return;
+  const v=parseFloat(val);
+  if(field==='tilgPct'){k.tilgPct=v;k.tilgMode='pct';k.tilgEuroVal=null;}
+  else if(field==='tilgEuro'){k.tilgEuroVal=v;k.tilgMode='euro';}
+  else k[field]=v;
+  const lb=document.getElementById('klbl-'+kId+'-'+field);
+  if(lb&&!lb.matches('input'))lb.textContent=field==='laufzeit'?v+' Jahre':(field==='zins'||field==='tilgPct')?fmtP(v):fmtE(v);
+  calc();
+}
+
+function addGewerk(name='',betrag=0){
+  const id=++gkId;gewerke.push({id,name,betrag});
+  const row=document.createElement('div');row.className='gewerk-row';row.id='gw-'+id;
+  const ni=document.createElement('input');ni.type='text';ni.className='gw-name';ni.placeholder='Gewerk benennen...';ni.value=name;
+  ni.addEventListener('input',function(){updGw(id,'name',this.value);});
+  const bi=document.createElement('input');bi.type='number';bi.className='gw-amt';bi.placeholder='Betrag €';bi.min='0';bi.step='500';
+  if(betrag)bi.value=betrag;
+  bi.addEventListener('input',function(){updGw(id,'betrag',parseFloat(this.value)||0);});
+  const rb=document.createElement('button');rb.className='rm-btn';rb.textContent='×';rb.onclick=function(){rmGw(id);};
+  row.appendChild(ni);row.appendChild(bi);row.appendChild(rb);
+  document.getElementById('gewerke-list').appendChild(row);
+  if(!name)ni.focus();
+  calc();
+}
+function updGw(id,f,v){const g=gewerke.find(x=>x.id===id);if(g){g[f]=v;calc();}}
+function rmGw(id){gewerke=gewerke.filter(x=>x.id!==id);document.getElementById('gw-'+id)?.remove();calc();}
+
+function addKredit(label='',betrag=0,zins=2.0,tilgPct=2.0,laufzeit=20){
+  const id=++krId;
+  const initE=Math.round((betrag||0)*tilgPct/100/12);
+  kredite.push({id,label,betrag,zins,tilgPct,laufzeit,tilgMode:'pct',tilgEuroVal:initE});
+  const initZe=Math.round((betrag||0)*zins/100/12);
+  const w=document.createElement('div');w.className='kredit-card';w.id='kr-'+id;
+  w.innerHTML=`<div class="kredit-header">
+    <input type="text" placeholder="z.B. KfW, Förderbank..." value="${label}" onchange="updKr(${id},'label',this.value)">
+    <button class="rm-kredit" onclick="rmKr(${id})">Entfernen</button>
+  </div>
+  <div class="field-row"><label>Betrag</label><button class="sl-btn" onclick="stepKr(${id},'betrag',-5000)">−</button><input type="range" id="ksl-${id}-betrag" min="5000" max="500000" step="5000" value="${betrag}" oninput="syncKr(${id},'betrag',this.value)"><button class="sl-btn" onclick="stepKr(${id},'betrag',5000)">+</button><span class="val-badge" id="klbl-${id}-betrag" style="min-width:90px" onclick="mkKreditEdit(this,${id},'betrag')">${fmtE(betrag)}</span></div>
+  <div class="field-row"><label>Zinssatz p.a.</label><button class="sl-btn" onclick="stepKr(${id},'zins',-0.1)">−</button><input type="range" id="ksl-${id}-zins" min="0.5" max="8" step="0.1" value="${zins}" oninput="syncKr(${id},'zins',this.value)"><button class="sl-btn" onclick="stepKr(${id},'zins',0.1)">+</button><span class="val-badge" id="klbl-${id}-zins" style="min-width:90px" onclick="mkKreditEdit(this,${id},'zins')">${fmtP(zins)}</span></div>
+  <div class="field-row"><label>Tilgung p.a. (%)</label><button class="sl-btn" onclick="stepKr(${id},'tilgPct',-0.1)">−</button><input type="range" id="ksl-${id}-tilgPct" min="0.5" max="6" step="0.1" value="${tilgPct}" oninput="syncKr(${id},'tilgPct',this.value)"><button class="sl-btn" onclick="stepKr(${id},'tilgPct',0.1)">+</button><span class="val-badge" id="klbl-${id}-tilgPct" style="min-width:90px" onclick="mkKreditEdit(this,${id},'tilgPct')">${fmtP(tilgPct)}</span></div>
+  <div class="field-row"><label>Tilgung / Monat (€)</label><button class="sl-btn" onclick="stepKr(${id},'tilgEuro',-50)">−</button><input type="range" id="ksl-${id}-tilgEuro" min="0" max="5000" step="50" value="${initE}" oninput="syncKr(${id},'tilgEuro',this.value)"><button class="sl-btn" onclick="stepKr(${id},'tilgEuro',50)">+</button><span class="val-badge" id="klbl-${id}-tilgEuro" style="min-width:90px" onclick="mkKreditEdit(this,${id},'tilgEuro')">${fmtE(initE)}</span></div>
+  <div class="tilg-hint">zuletzt geändert gilt — % und € sind verknüpft</div>
+  <div class="rate-row">
+    <div class="rate-pill"><div class="dot" style="background:var(--blue)"></div><span>Tilgung</span>&nbsp;<strong id="kr-te-${id}">${fmtE(initE)}</strong></div>
+    <span class="rate-sep">+</span>
+    <div class="rate-pill"><div class="dot" style="background:var(--amber)"></div><span>Zinsen</span>&nbsp;<strong id="kr-ze-${id}">${fmtE(initZe)}</strong></div>
+    <span class="rate-sep">=</span>
+    <div class="rate-pill"><strong id="kr-re-${id}">${fmtE(initE+initZe)} / Mo.</strong></div>
+  </div>
+  <div class="field-row"><label>Laufzeit</label><button class="sl-btn" onclick="stepKr(${id},'laufzeit',-1)">−</button><input type="range" id="ksl-${id}-laufzeit" min="5" max="40" step="1" value="${laufzeit}" oninput="syncKr(${id},'laufzeit',this.value)"><button class="sl-btn" onclick="stepKr(${id},'laufzeit',1)">+</button><span class="val-badge" id="klbl-${id}-laufzeit" style="min-width:90px" onclick="mkKreditEdit(this,${id},'laufzeit')">${laufzeit} Jahre</span></div>`;
+  document.getElementById('kredite-list').appendChild(w);calc();
+}
+function updKr(id,f,v){const k=kredite.find(x=>x.id===id);if(k){k[f]=v;calc();}}
+function rmKr(id){kredite=kredite.filter(x=>x.id!==id);document.getElementById('kr-'+id)?.remove();calc();}
+
+function calc(){
+  const kp=getV('kaufpreis'),eg=getV('eigen'),nkR=getV('nk')/100,afaAnt=getV('afa-ant')/100;
+  const miete=getV('miete'),rueckPct=getV('rueck')/100,leerPct=getV('leerstand')/100;
+
+  ['kaufpreis','eigen','nk','afa-ant','miete','rueck','leerstand'].forEach(id=>{
+    const lb=document.getElementById('lbl-'+id);
+    if(lb&&!lb.matches('input')){const v=getV(id);lb.textContent=['nk','afa-ant','rueck','leerstand'].includes(id)?fmtP(v):fmtE(v);}
+  });
+
+  const gw=gewerke.reduce((s,g)=>s+(parseFloat(g.betrag)||0),0);
+  document.getElementById('gewerk-total').textContent=fmtE(gw);
+  const inv=kp*(1+nkR)+gw,zk=kredite.reduce((s,k)=>s+(parseFloat(k.betrag)||0),0);
+  const mb=Math.max(0,inv-eg-zk);
+  const disp=document.getElementById('master-betrag-display');if(disp)disp.textContent=fmtE(mb);
+
+  const mTP=masterTilgMode==='euro'?(mb>0?Math.min(6,Math.max(0.5,parseFloat((masterTilgEuroVal*12/mb*100).toFixed(2)))):masterTilgPct):masterTilgPct;
+  const mTE=masterTilgMode==='euro'?(masterTilgEuroVal!=null?masterTilgEuroVal:Math.round(mb*mTP/100/12)):Math.round(mb*mTP/100/12);
+  const mZe=Math.round(mb*masterZins/100/12);
+
+  if(masterTilgMode==='pct'){masterTilgEuroVal=mTE;const sl=document.getElementById('msl-tilgEuro');if(sl)sl.value=Math.min(mTE,5000);const lb=document.getElementById('mlbl-tilgEuro');if(lb&&!lb.matches('input'))lb.textContent=fmtE(mTE);}
+  else{const sl=document.getElementById('msl-tilgPct');if(sl)sl.value=mTP;const lb=document.getElementById('mlbl-tilgPct');if(lb&&!lb.matches('input'))lb.textContent=fmtP(mTP);}
+  const mte=document.getElementById('ms-te');if(mte)mte.textContent=fmtE(mTE);
+  const mze=document.getElementById('ms-ze');if(mze)mze.textContent=fmtE(mZe);
+  const mre=document.getElementById('ms-re');if(mre)mre.textContent=fmtE(mTE+mZe)+' / Mo.';
+
+  kredite.forEach(k=>{
+    const{pct,euro}=resolveKreditTilg(k);
+    const kZe=Math.round((parseFloat(k.betrag)||0)*k.zins/100/12);
+    if(k.tilgMode==='pct'){const sl=document.getElementById('ksl-'+k.id+'-tilgEuro');if(sl)sl.value=Math.min(euro,5000);const lb=document.getElementById('klbl-'+k.id+'-tilgEuro');if(lb&&!lb.matches('input'))lb.textContent=fmtE(euro);k.tilgEuroVal=euro;}
+    else{const sl=document.getElementById('ksl-'+k.id+'-tilgPct');if(sl)sl.value=pct;const lb=document.getElementById('klbl-'+k.id+'-tilgPct');if(lb&&!lb.matches('input'))lb.textContent=fmtP(pct);}
+    const te=document.getElementById('kr-te-'+k.id);if(te)te.textContent=fmtE(euro);
+    const ze=document.getElementById('kr-ze-'+k.id);if(ze)ze.textContent=fmtE(kZe);
+    const re=document.getElementById('kr-re-'+k.id);if(re)re.textContent=fmtE(euro+kZe)+' / Mo.';
+  });
+
+  const allK=[{label:'Hausbank',betrag:mb,zins:masterZins,tilg:mTP,laufzeit:masterLaufzeit},
+    ...kredite.map(k=>{const{pct}=resolveKreditTilg(k);return{label:k.label||'Zusatzkredit',betrag:parseFloat(k.betrag)||0,zins:k.zins,tilg:pct,laufzeit:k.laufzeit};})];
+
+  let totalMR=0,totalZG=0;const cPlan={};const maxL=Math.max(...allK.map(k=>k.laufzeit),1);
+  allK.forEach(k=>{
+    if(!k.betrag)return;
+    const zr=k.zins/100,tr=k.tilg/100,mr=Math.round(k.betrag*(zr+tr)/12);
+    totalMR+=mr;let rest=k.betrag;
+    for(let y=1;y<=k.laufzeit;y++){const jz=Math.round(rest*zr);const jt=Math.max(0,Math.min(mr*12-jz,rest));rest=Math.max(0,rest-jt);totalZG+=jz;if(!cPlan[y])cPlan[y]={rate:0,zinsen:0,tilgung:0,rest:0};cPlan[y].rate+=mr*12;cPlan[y].zinsen+=jz;cPlan[y].tilgung+=jt;cPlan[y].rest+=rest;}
+  });
+
+  const kSum=mb+zk,ekq=inv>0?eg/inv*100:0,avgZ=kSum>0?allK.reduce((s,k)=>s+k.zins*(k.betrag||0),0)/kSum:0;
+  const netMiete=miete*(1-leerPct),rueckEuro=netMiete*rueckPct,cf=(netMiete-rueckEuro)-totalMR,cfPos=cf>=0;
+
+  const strip=document.getElementById('cf-strip');
+  if(strip){
+    strip.innerHTML=`<span class="${cfPos?'cs-val-pos':'cs-val-neg'} cs-val">${cfPos?'+':'−'} ${fmtE(Math.abs(cf))}<span style="font-size:14px;font-weight:400"> / Mo</span></span><span class="${cfPos?'cs-sub-pos':'cs-sub-neg'} cs-sub">&nbsp;·&nbsp;${cfPos?'+ ':'− '}${fmtE(Math.abs(cf*12))} / Jahr</span>`;
+  }
+
+  document.getElementById('out-nettomiete').textContent=fmtE(netMiete);
+  document.getElementById('out-rueckstellung').textContent=fmtE(rueckEuro);
+  document.getElementById('out-totalrate').textContent=fmtE(totalMR);
+
+  document.getElementById('cashflow-highlight').innerHTML=`<div class="cf-highlight ${cfPos?'cf-pos':'cf-neg'}">
+    <div><div class="${cfPos?'cf-label-pos':'cf-label-neg'} cf-label">Monatl. Netto-Cashflow</div>
+    <div class="${cfPos?'cf-sub-pos':'cf-sub-neg'} cf-sub">${cfPos?'+ ':'− '}${fmtE(Math.abs(cf*12))} pro Jahr</div></div>
+    <div class="${cfPos?'cf-val-pos':'cf-val-neg'} cf-val">${cfPos?'+':'−'} ${fmtE(Math.abs(cf))}<span style="font-size:15px;font-weight:400"> / Mo</span></div>
+  </div>`;
+
+  document.getElementById('metrics-grid').innerHTML=`
+    <div class="metric"><p class="ml">Gesamtinvestition</p><p class="mv blue">${fmtE(inv)}</p></div>
+    <div class="metric"><p class="ml">Monatliche Rate</p><p class="mv blue">${fmtE(totalMR)}</p></div>
+    <div class="metric"><p class="ml">Gesamtzinsen</p><p class="mv amber">${fmtE(totalZG)}</p></div>
+    <div class="metric"><p class="ml">EK-Quote</p><p class="mv ${ekq>=20?'green':ekq>=10?'amber':'red'}">${fmtP(ekq)}</p></div>`;
+
+  const ekP=inv>0?Math.min(100,eg/inv*100):0;
+  document.getElementById('bar-ek').style.width=ekP.toFixed(1)+'%';
+  document.getElementById('bar-debt').style.width=(100-ekP).toFixed(1)+'%';
+  document.getElementById('bar-ek-lbl').textContent=fmtE(eg)+' EK';
+  document.getElementById('bar-debt-lbl').textContent=fmtE(kSum)+' Kredit';
+
+  const bruttoR=inv>0?miete*12/inv*100:0,nettoR=inv>0?(netMiete-rueckEuro)*12/inv*100:0,cashR=inv>0?cf*12/inv*100:0,afaJahr=kp*afaAnt*0.02;
+  document.getElementById('rendite-grid').innerHTML=`
+    <div class="metric"><p class="ml">Bruttomietrendite</p><p class="mv ${bruttoR>=5?'green':bruttoR>=3?'amber':'red'}">${fmtP(bruttoR)}</p></div>
+    <div class="metric"><p class="ml">Nettomietrendite</p><p class="mv ${nettoR>=4?'green':nettoR>=2?'amber':'red'}">${fmtP(nettoR)}</p></div>
+    <div class="metric"><p class="ml">Cashflow-Rendite</p><p class="mv ${cashR>=0?'green':'red'}">${fmtP(cashR)}</p></div>
+    <div class="metric"><p class="ml">AfA / Jahr</p><p class="mv green">${fmtE(afaJahr)}</p></div>`;
+
+  const cfRows=[['Kaltmiete','+',fmtE(miete),''],['Leerstand ('+fmtP(leerPct*100)+')','−',fmtE(miete*leerPct),'var(--red)'],['Rückstellung ('+fmtP(rueckPct*100)+')','−',fmtE(rueckEuro),'var(--red)'],['Kreditrate gesamt','−',fmtE(totalMR),'var(--red)']];
+  document.getElementById('cashflow-detail').innerHTML=cfRows.map(([l,s,v,c])=>`<div style="display:flex;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--border);font-size:13px"><span style="color:var(--text2)">${l}</span><span style="color:${c||'var(--text)'};">${s} ${v}</span></div>`).join('')+
+    `<div style="display:flex;justify-content:space-between;padding:14px 0;font-size:14px;font-weight:500"><span>Netto-Cashflow</span><span style="color:${cfPos?'var(--green)':'var(--red)'}">${cfPos?'+':'−'} ${fmtE(Math.abs(cf))}</span></div>`;
+
+  const sfRows=allK.filter(k=>k.betrag>0).map(k=>({label:k.label,yrs:calcSFJahre(k.betrag,k.zins,k.tilg)}));
+  const maxSf=sfRows.reduce((mx,r)=>r.yrs!=null?Math.max(mx,r.yrs):mx,0);
+  document.getElementById('schuldenfrei-box').innerHTML=
+    sfRows.map(r=>`<div class="sf-row"><span class="sf-label">${r.label}</span><span class="sf-val">${r.yrs!=null?r.yrs+' Jahre':'— (Tilgung zu niedrig)'}</span></div>`).join('')+
+    `<div class="sf-row"><span class="sf-total-label">Vollständig schuldenfrei in</span><span class="sf-total-val">${maxSf>0?maxSf+' Jahren':'—'}</span></div>`;
+
+  const planRows=[];for(let y=1;y<=maxL;y++){if(cPlan[y])planRows.push({year:y,...cPlan[y]});}
+  const show=[...planRows.slice(0,5)];if(planRows.length>5)show.push(planRows[planRows.length-1]);
+  document.getElementById('plan-body').innerHTML=show.map((r,i)=>`<tr${i===show.length-1&&planRows.length>5?' style="border-top:2px dashed rgba(255,255,255,0.06)"':''}>
+    <td style="color:var(--text3)">${r.year}</td><td>${fmtE(r.rate)}</td>
+    <td style="color:var(--amber)">${fmtE(r.zinsen)}</td><td style="color:var(--blue)">${fmtE(r.tilgung)}</td>
+    <td>${fmtE(r.rest)}</td></tr>`).join('');
+
+  renderBew(inv,eg,ekq,avgZ,totalMR,mb,totalZG,kSum,gw,kp,cf,bruttoR,nettoR,maxSf);
+}
+
+function renderBew(inv,ek,ekq,avgZ,rate,mb,zinsen,kredit,gw,kp,cf,bruttoR,nettoR,sfJahre){
+  const it=[];let sc=100;
+  if(ekq>=30)it.push({c:'green',t:`Eigenkapitalquote ${fmtP(ekq)} — exzellent. Banken vergeben beste Konditionen ohne Risikoaufschlag.`});
+  else if(ekq>=20)it.push({c:'green',t:`EK-Quote ${fmtP(ekq)} ist solide und bankkonform. 30 %+ wäre das nächste Optimierungsziel.`});
+  else if(ekq>=10){it.push({c:'amber',t:`EK-Quote ${fmtP(ekq)} ist knapp — Banken verlangen Risikoaufschläge auf den Zinssatz.`});sc-=20;}
+  else{it.push({c:'red',t:`Unter 10 % EK (${fmtP(ekq)}) — Vollfinanzierung mit hohem Klumpenrisiko. Eigenkapitalbasis dringend stärken.`});sc-=40;}
+  if(avgZ>0){
+    if(avgZ<=3.5)it.push({c:'green',t:`Ø Zinssatz ${fmtP(avgZ)} ist attraktiv. Zinsbindung 10–15 Jahre fixieren um Anschlussfinanzierungsrisiko zu minimieren.`});
+    else if(avgZ<=5.0){it.push({c:'amber',t:`Zinsniveau ${fmtP(avgZ)} ist erhöht. Sondertilgungsrecht (5–10 % p.a.) aktiv aushandeln und nutzen.`});sc-=15;}
+    else{it.push({c:'red',t:`${fmtP(avgZ)} p.a. ist teuer — bei ${fmtE(kredit)} kostet das ${fmtE(Math.round(kredit*0.01))}/Jahr extra vs. 1 % günstigerem Zins.`});sc-=25;}
+  }
+  if(sfJahre>0){
+    if(sfJahre<=20)it.push({c:'green',t:`Schuldenfrei in ${sfJahre} Jahren — starke Tilgungsdisziplin schafft früh finanzielle Freiheit.`});
+    else if(sfJahre<=30)it.push({c:'amber',t:`Schuldenfrei in ${sfJahre} Jahren. Sondertilgungen könnten diesen Horizont deutlich verkürzen.`});
+    else it.push({c:'amber',t:`Schuldenfrei erst in ${sfJahre} Jahren — Tilgung erhöhen oder Sondertilgungen aktiv nutzen.`});
+  }
+  if(cf>=200)it.push({c:'green',t:`Positiver Cashflow ${fmtE(cf)}/Mo. — das Objekt trägt sich selbst und generiert freien Liquiditätsüberschuss.`});
+  else if(cf>=0)it.push({c:'amber',t:`Cashflow nahezu ausgeglichen (${fmtE(cf)}/Mo.). Puffer für unvorhergesehene Reparaturen ist gering.`});
+  else{it.push({c:'red',t:`Negativer Cashflow ${fmtE(Math.abs(cf))}/Mo. — nur tragbar wenn Wertzuwachs und Steuervorteile die Lücke schließen.`});sc-=30;}
+  if(bruttoR>=6)it.push({c:'green',t:`Bruttomietrendite ${fmtP(bruttoR)} — starke Renditeimmobilie. Ab 6 % gilt das als attraktives Investment.`});
+  else if(bruttoR>=4)it.push({c:'amber',t:`Bruttomietrendite ${fmtP(bruttoR)} — solide. Hebel liegt in Mietsteigerung oder Wertzuwachs.`});
+  else{it.push({c:'amber',t:`Bruttomietrendite ${fmtP(bruttoR)} ist niedrig. Kalkuliere mit langfristiger Wertsteigerung.`});sc-=10;}
+  if(gw>0){const gp=inv>0?gw/inv*100:0;if(gp>25){it.push({c:'amber',t:`Gewerkeanteil ${fmtP(gp)} — mindestens 15 % Puffer einplanen, Renovierungen überschreiten oft 20–30 %.`});sc-=10;}else it.push({c:'green',t:`Gewerkeanteil ${fmtP(gp)} ist kontrolliert. Energetische Investitionen steigern Mietniveau und Verkaufswert.`});}
+  it.push({c:'green',t:`AfA-Vorteil bei Vermietung: 2 % des Gebäudewerts jährlich steuerlich absetzbar — reduziert dein zu versteuerndes Einkommen signifikant.`});
+  sc=Math.max(10,sc);const scC=sc>=75?'var(--green)':sc>=50?'var(--amber)':'var(--red)';const scL=sc>=75?'Solides Investment':sc>=50?'Optimierungsbedarf':'Hohes Risiko';
+  document.getElementById('bewertung-box').innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-size:14px;font-weight:500">Investment-Score</span>
+      <span style="font-size:20px;font-weight:600;color:${scC};letter-spacing:-.5px">${sc}/100 — ${scL}</span>
+    </div>
+    <div class="score-track"><div class="score-fill" style="width:${sc}%;background:${scC}"></div></div>
+    ${it.map(i=>`<div class="bew-item"><div class="bew-dot" style="background:var(--${i.c})"></div><div class="bew-text">${i.t}</div></div>`).join('')}`;
+}
+
+buildMasterCard();
+calc();
+resetPwSteps();
+
+['kaufpreis','eigen','nk','afa-ant','miete','rueck','leerstand'].forEach(id=>{
+  document.getElementById(id).addEventListener('input',function(){
+    const lb=document.getElementById('lbl-'+id);
+    if(lb&&!lb.matches('input')){const v=parseFloat(this.value);lb.textContent=['nk','afa-ant','rueck','leerstand'].includes(id)?fmtP(v):fmtE(v);}
+    calc();
+  });
+});
+</script>
+</body>
+</html>

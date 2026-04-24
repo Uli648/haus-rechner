@@ -102,9 +102,9 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
 hr.div{border:none;border-top:1px solid var(--border);margin:28px 0}
 
-.gewerk-header{display:grid;grid-template-columns:36px 1fr 110px 52px 36px;gap:6px;margin-bottom:6px;padding:0 2px}
+.gewerk-header{display:grid;grid-template-columns:36px 1fr 90px 52px 36px;gap:6px;margin-bottom:6px;padding:0 2px}
 .gewerk-header span{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
-.gewerk-row{display:grid;grid-template-columns:36px 1fr 110px 52px 36px;gap:6px;align-items:center;margin-bottom:8px}
+.gewerk-row{display:grid;grid-template-columns:36px 1fr 90px 52px 36px;gap:6px;align-items:center;margin-bottom:8px}
 input.gw-name{font-size:13px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);width:100%;outline:none;font-family:inherit;transition:border-color .2s}
 input.gw-name:focus{border-color:var(--blue)}
 input.gw-amt{font-size:13px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);width:100%;text-align:right;outline:none;font-family:inherit;transition:border-color .2s}
@@ -246,6 +246,9 @@ table.plan tr:hover td{background:rgba(255,255,255,0.02)}
   .plan-title-input{font-size:28px}
   .main{padding-left:16px;padding-right:16px}
   .topbar{padding-left:16px;padding-right:16px}
+  .gewerk-header,.gewerk-row{grid-template-columns:32px 1fr 72px 44px 30px;gap:4px}
+  input.gw-name{font-size:14px;padding:8px 8px}
+  input.gw-amt{font-size:12px;padding:8px 6px}
   .g3,.g4{grid-template-columns:repeat(2,minmax(0,1fr))}
   .field-row{flex-wrap:wrap}
   .field-row label{min-width:100%}
@@ -343,7 +346,6 @@ table.plan tr:hover td{background:rgba(255,255,255,0.02)}
           <button class="pf-btn pf-2 active" id="pf-2" onclick="togglePrio(2)">P2</button>
           <button class="pf-btn pf-3 active" id="pf-3" onclick="togglePrio(3)">P3</button>
         </div>
-        <span style="font-size:11px;color:var(--text3);margin-left:4px">gehen in Kalkulation ein</span>
       </div>
       <div class="gewerk-header">
         <span>P</span><span>Gewerk</span><span style="text-align:right">Betrag</span><span></span><span></span>

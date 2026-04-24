@@ -750,18 +750,42 @@ function applyState(s){
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');}));
 
-function exportPlan(){
+async function exportPlan(){
   const state=getState();
   const plans=getPlans();
   const name=activePlanId?plans.find(p=>p.id===activePlanId)?.name||'plan':'plan';
   const payload={version:1,name,exportedAt:new Date().toISOString(),state};
-  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const json=JSON.stringify(payload,null,2);
+  const filename=name.replace(/[^a-z0-9äöüÄÖÜ\s-]/gi,'_')+'.json';
+  const blob=new Blob([json],{type:'application/json'});
+
+  // Mobile: use native Share Sheet if available
+  if(navigator.share && navigator.canShare){
+    const file=new File([blob],filename,{type:'application/json'});
+    if(navigator.canShare({files:[file]})){
+      try{
+        await navigator.share({
+          title: name,
+          text: 'Finanzierungsplan: '+name,
+          files: [file]
+        });
+        closeSidebar();
+        return;
+      }catch(e){
+        if(e.name==='AbortError')return; // user cancelled - don't fallback
+      }
+    }
+  }
+
+  // Desktop: trigger "Save As" dialog via download
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;
-  a.download=name.replace(/[^a-z0-9äöüÄÖÜ\s-]/gi,'_')+'.json';
+  a.download=filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
   closeSidebar();
 }
 

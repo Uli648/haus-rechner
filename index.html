@@ -198,6 +198,12 @@ input.gw-amt:focus{border-color:var(--blue)}
 .kredit-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r2);padding:22px 26px;margin-bottom:10px;transition:border-color .2s}
 .kredit-card.master{border-color:rgba(41,151,255,0.4)}
 .master-badge{display:inline-block;background:var(--blue-dim);color:var(--blue);font-size:10px;font-weight:500;padding:2px 8px;border-radius:6px;margin-left:8px;vertical-align:middle;letter-spacing:.04em}
+.kredit-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.master-fix-toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--text3);user-select:none;white-space:nowrap}
+.master-fix-toggle input{width:15px;height:15px;cursor:pointer;accent-color:var(--blue)}
+.master-fix-toggle:hover{color:var(--text2)}
+.kredit-card.master-locked{border-color:rgba(41,151,255,0.35);background:linear-gradient(180deg,rgba(41,151,255,0.05),transparent)}
+.kredit-card.master-locked .master-badge{background:rgba(41,151,255,0.2);color:var(--blue)}
 .kredit-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
 .kredit-header input[type=text]{font-size:14px;font-weight:500;border:none;background:transparent;color:var(--text);outline:none;width:220px;font-family:inherit}
 .rm-kredit{background:none;border:1px solid var(--border);border-radius:8px;color:var(--text3);padding:5px 12px;cursor:pointer;font-size:12px;font-family:inherit;transition:all .2s}
@@ -304,6 +310,14 @@ table.plan tr:hover td{background:rgba(255,255,255,0.02)}
 .sidebar-lock:hover{border-color:var(--red);color:var(--red)}
 /* Rollen */
 .role-badge{font-size:10px;font-weight:600;padding:3px 9px;border-radius:20px;text-transform:uppercase;letter-spacing:.04em}
+.hist-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--border)}
+.hist-row:last-child{border-bottom:none}
+.hist-info{display:flex;flex-direction:column;gap:2px}
+.hist-editor{font-size:14px;font-weight:500;color:var(--text)}
+.hist-date{font-size:12px;color:var(--text3)}
+.hist-current{font-size:10px;font-weight:600;color:var(--green);background:rgba(52,199,89,0.15);padding:2px 7px;border-radius:10px;display:inline-block;width:fit-content;margin-top:2px}
+.hist-restore{background:transparent;border:1px solid rgba(41,151,255,0.3);border-radius:8px;padding:6px 12px;font-size:12px;color:var(--blue);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all .2s}
+.hist-restore:hover{background:var(--blue-dim);border-color:var(--blue)}
 .role-admin{background:rgba(52,199,89,0.15);color:var(--green);border:1px solid rgba(52,199,89,0.3)}
 .role-reader{background:rgba(255,159,10,0.15);color:var(--amber);border:1px solid rgba(255,159,10,0.3)}
 .topbar-actions{display:flex;align-items:center;gap:10px}
@@ -548,6 +562,15 @@ body.reader-mode .plan-del{display:none !important}
 </div><!-- /#app -->
 
 <!-- SAVE NAME MODAL -->
+<div class="modal-bg" id="history-modal">
+  <div class="modal" style="max-width:480px">
+    <button class="modal-close" onclick="closeModal('history-modal')">×</button>
+    <h3>Änderungsverlauf</h3>
+    <p>Die letzten 10 gespeicherten Versionen dieses Plans.</p>
+    <div id="history-list" style="max-height:360px;overflow-y:auto;margin-top:8px"></div>
+  </div>
+</div>
+
 <div class="modal-bg" id="save-name-modal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal('save-name-modal')">×</button>
@@ -651,20 +674,54 @@ async function cloudSavePlan(typ,id,name,state){
   if(!sb)throw new Error('Keine Cloud-Verbindung');
   // Bearbeiter-Info in die Daten einbetten
   state={...state,_editor:editorName||'—',_editedAt:new Date().toISOString()};
+  let savedId=id;
   if(id&&!String(id).startsWith('plan_')&&!String(id).startsWith('hh_')){
     const{error}=await sb.from('plaene').update({name,daten:state}).eq('id',id);
     if(error)throw error;
-    return id;
+    savedId=id;
   }else{
     const{data,error}=await sb.from('plaene').insert({typ,name,daten:state}).select().single();
     if(error)throw error;
-    return data.id;
+    savedId=data.id;
   }
+  // Versions-Historie schreiben (nur wenn sich etwas geändert hat)
+  try{await cloudSaveHistory(savedId,name,state);}catch(e){console.warn('Historie',e);}
+  return savedId;
+}
+
+/* Version in Historie schreiben — nur bei echter Änderung, max. 10 behalten */
+async function cloudSaveHistory(planId,name,state){
+  if(!sb)return;
+  // Letzten Eintrag holen und vergleichen
+  const{data:last}=await sb.from('plan_historie').select('daten').eq('plan_id',planId).order('erstellt_am',{ascending:false}).limit(1);
+  if(last&&last.length){
+    const a=stripMeta(last[0].daten),b=stripMeta(state);
+    if(JSON.stringify(a)===JSON.stringify(b))return; // keine echte Änderung
+  }
+  await sb.from('plan_historie').insert({plan_id:planId,name,daten:state,editor:editorName||'—'});
+  // Alte Versionen über 10 löschen
+  const{data:all}=await sb.from('plan_historie').select('id').eq('plan_id',planId).order('erstellt_am',{ascending:false});
+  if(all&&all.length>10){
+    const toDelete=all.slice(10).map(r=>r.id);
+    await sb.from('plan_historie').delete().in('id',toDelete);
+  }
+}
+// Meta-Felder für Vergleich entfernen
+function stripMeta(obj){const c={...obj};delete c._editor;delete c._editedAt;return c;}
+
+/* Historie eines Plans laden */
+async function cloudGetHistory(planId){
+  if(!sb)return[];
+  const{data,error}=await sb.from('plan_historie').select('*').eq('plan_id',planId).order('erstellt_am',{ascending:false}).limit(10);
+  if(error){console.warn(error);return[];}
+  return data||[];
 }
 async function cloudDeletePlan(id){
   if(!sb)throw new Error('Keine Cloud-Verbindung');
   const{error}=await sb.from('plaene').delete().eq('id',id);
   if(error)throw error;
+  // Historie mit löschen
+  try{await sb.from('plan_historie').delete().eq('plan_id',id);}catch(e){console.warn(e);}
 }
 
 /* Datei-Upload in Storage-Bucket 'dokumente' */
@@ -767,9 +824,44 @@ function showLastModified(state){
   if(ed&&ed!=='—'){
     let dstr='';
     if(at){try{const d=new Date(at);dstr=d.toLocaleDateString('de-DE')+' um '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr';}catch{}}
-    el.textContent='Zuletzt geändert von '+ed+(dstr?' · '+dstr:'');
+    el.innerHTML='Zuletzt geändert von '+ed+(dstr?' · '+dstr:'')+(activePlanId?' · <span style="color:var(--blue);cursor:pointer;text-decoration:underline" onclick="openHistory()">Verlauf</span>':'');
     el.style.display='block';
   }else{el.style.display='none';}
+}
+
+/* ═══ AUDIT TRAIL / VERSIONS-VERLAUF ═══ */
+async function openHistory(){
+  if(!activePlanId){return;}
+  const modal=document.getElementById('history-modal');
+  const list=document.getElementById('history-list');
+  modal.classList.add('open');
+  list.innerHTML='<p style="color:var(--text3);font-size:13px;padding:12px 0">Lädt…</p>';
+  const versions=await cloudGetHistory(activePlanId);
+  if(!versions.length){list.innerHTML='<p style="color:var(--text3);font-size:13px;padding:12px 0">Noch keine gespeicherten Versionen.</p>';return;}
+  list.innerHTML='';
+  versions.forEach((v,i)=>{
+    const d=new Date(v.erstellt_am);
+    const dstr=d.toLocaleDateString('de-DE')+' · '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr';
+    const row=document.createElement('div');
+    row.className='hist-row';
+    row.innerHTML=`<div class="hist-info"><span class="hist-editor">${v.editor||'—'}</span><span class="hist-date">${dstr}</span>${i===0?'<span class="hist-current">aktuell</span>':''}</div>`;
+    if(isAdmin()&&i>0){
+      const btn=document.createElement('button');
+      btn.className='hist-restore';btn.textContent='↩ Zurückspringen';
+      btn.onclick=()=>restoreVersion(v);
+      row.appendChild(btn);
+    }
+    list.appendChild(row);
+  });
+}
+function restoreVersion(v){
+  if(!isAdmin())return;
+  if(!confirm('Zu dieser Version zurückspringen? Der aktuelle Stand wird als neue Version gesichert, bevor zurückgesprungen wird.'))return;
+  applyState(v.daten);
+  setPlanTitle(v.name);
+  markDirty();
+  closeModal('history-modal');
+  setCloudStatus('○ Zurückgesprungen — bitte speichern','var(--amber)');
 }
 
 function renamePlan(){
@@ -911,7 +1003,7 @@ function resetCalc(){
   gewerke=[];kredite=[];gkId=0;krId=0;
   aktivePrios=new Set([1,2,3]);
   [1,2,3].forEach(p=>{const btn=document.getElementById('pf-'+p);if(btn)btn.classList.add('active');});
-  masterZins=0;masterTilgPct=0;masterLaufzeit=20;masterTilgMode='pct';masterTilgEuroVal=null;
+  masterZins=0;masterTilgPct=0;masterLaufzeit=20;masterTilgMode='pct';masterTilgEuroVal=null;masterFixed=false;masterFixedBetrag=null;
   document.getElementById('gewerke-list').innerHTML='';
   document.getElementById('kredite-list').innerHTML='';
   document.getElementById('master-kredit-wrap').innerHTML='';
@@ -930,7 +1022,7 @@ function getState(){
   return{
     kaufpreis:getV('kaufpreis'),eigen:getV('eigen'),nk:getV('nk'),afaAnt:getV('afa-ant'),
     miete:getV('miete'),rueck:getV('rueck'),leerstand:getV('leerstand'),
-    masterZins,masterTilgPct,masterLaufzeit,masterTilgMode,masterTilgEuroVal,
+    masterZins,masterTilgPct,masterLaufzeit,masterTilgMode,masterTilgEuroVal,masterFixed,masterFixedBetrag,
     gewerke:gewerke.map(g=>({name:g.name,betrag:g.betrag,prio:g.prio||1,docs:g.docs||[],payments:g.payments||[],budgetOrig:g.budgetOrig})),
     aktivePrios:[...aktivePrios],
     kredite:kredite.map(k=>({label:k.label,betrag:k.betrag,zins:k.zins,tilgPct:k.tilgPct,laufzeit:k.laufzeit,tilgMode:k.tilgMode,tilgEuroVal:k.tilgEuroVal}))
@@ -956,6 +1048,8 @@ function applyState(s){
     masterLaufzeit=d.masterLaufzeit!==undefined?d.masterLaufzeit:30;
     masterTilgMode=d.masterTilgMode||'pct';
     masterTilgEuroVal=d.masterTilgEuroVal!=null?d.masterTilgEuroVal:null;
+    masterFixed=d.masterFixed===true;
+    masterFixedBetrag=d.masterFixedBetrag!=null?d.masterFixedBetrag:null;
     gewerke=[];kredite=[];gkId=0;krId=0;
     document.getElementById('gewerke-list').innerHTML='';
     document.getElementById('kredite-list').innerHTML='';
@@ -1272,6 +1366,7 @@ const fmtE=v=>Math.round(v).toLocaleString('de-DE')+' €';
 const fmtP=v=>parseFloat(v).toFixed(2).replace('.',',')+' %';
 let gewerke=[],kredite=[],gkId=0,krId=0;
 let masterZins=3.5,masterTilgPct=2.0,masterLaufzeit=30,masterTilgMode='pct',masterTilgEuroVal=null;
+let masterFixed=false,masterFixedBetrag=null;
 
 function getV(id){return parseFloat(document.getElementById(id).value)||0;}
 
@@ -1305,7 +1400,7 @@ function mkEdit(el,sid,min,max,step,unit){
     let v=parseFloat(inp.value);if(isNaN(v))v=cur;v=Math.min(max,Math.max(min,v));sl.value=v;
     const b=document.createElement('span');b.className='val-badge';b.id='lbl-'+sid;
     b.onclick=function(){mkEdit(this,sid,min,max,step,unit);};
-    b.textContent=unit==='%'?fmtP(v):fmtE(v);inp.replaceWith(b);calc();
+    b.textContent=unit==='%'?fmtP(v):fmtE(v);inp.replaceWith(b);calc();scheduleAutoSave();
   }
   inp.addEventListener('blur',done);
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=cur;inp.blur();}});
@@ -1329,7 +1424,7 @@ function mkMasterEdit(el,field){
     const b=document.createElement('span');b.className='val-badge';b.id='mlbl-'+field;
     b.onclick=function(){mkMasterEdit(this,field);};
     b.textContent=unit==='%'?fmtP(v):unit==='€'?fmtE(v):v+' Jahre';
-    inp.replaceWith(b);calc();
+    inp.replaceWith(b);calc();scheduleAutoSave();
   }
   inp.addEventListener('blur',done);
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=cur;inp.blur();}});
@@ -1353,13 +1448,14 @@ function mkKreditEdit(el,kId,field){
     const b=document.createElement('span');b.className='val-badge';b.id='klbl-'+kId+'-'+field;b.style.minWidth='90px';
     b.onclick=function(){mkKreditEdit(this,kId,field);};
     b.textContent=unit==='%'?fmtP(v):unit==='€'?fmtE(v):v+' Jahre';
-    inp.replaceWith(b);calc();
+    inp.replaceWith(b);calc();scheduleAutoSave();
   }
   inp.addEventListener('blur',done);
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur();if(e.key==='Escape'){inp.value=cur;inp.blur();}});
 }
 
 function calcMasterBetrag(){
+  if(masterFixed&&masterFixedBetrag!=null)return masterFixedBetrag;
   const kp=getV('kaufpreis'),eg=getV('eigen'),nkR=getV('nk')/100;
   const gw=gewerke.filter(g=>aktivePrios.has(g.prio)).reduce((s,g)=>s+(parseFloat(g.betrag)||0),0);
   const zk=kredite.reduce((s,k)=>s+(parseFloat(k.betrag)||0),0);
@@ -1406,15 +1502,16 @@ function kreditDetail(betrag,zins,tilgPct,laufzeit){
 
 function buildMasterCard(){
   const wrap=document.getElementById('master-kredit-wrap');wrap.innerHTML='';
-  const div=document.createElement('div');div.className='kredit-card master';
+  const div=document.createElement('div');div.className='kredit-card master'+(masterFixed?' master-locked':'');
   const mb=calcMasterBetrag(),initE=Math.round(mb*masterTilgPct/100/12);
   masterTilgEuroVal=initE;
   const initZe=Math.round(mb*masterZins/100/12);
   div.innerHTML=`<div class="kredit-header">
-    <div style="display:flex;align-items:center"><span style="font-size:14px;font-weight:500">Hausbank (Hauptkredit)</span><span class="master-badge">Auto</span></div>
+    <div style="display:flex;align-items:center"><span style="font-size:14px;font-weight:500">Hausbank (Hauptkredit)</span><span class="master-badge">${masterFixed?'🔒 Fixiert':'Auto'}</span></div>
+    <label class="master-fix-toggle"><input type="checkbox" ${masterFixed?'checked':''} onchange="toggleMasterFixed(this.checked)"><span>Kredit fixieren</span></label>
   </div>
   <div style="font-size:22px;font-weight:600;color:var(--blue);letter-spacing:-.5px;padding:4px 0 2px" id="master-betrag-display">${fmtE(mb)}</div>
-  <div style="font-size:12px;color:var(--text3);margin-bottom:16px">= Gesamtinvestition − Eigenkapital − Zusatzkredite</div>
+  <div style="font-size:12px;color:var(--text3);margin-bottom:16px">${masterFixed?'🔒 Festgeschrieben — ändert sich nicht mehr mit Gewerken/Eigenkapital':'= Gesamtinvestition − Eigenkapital − Zusatzkredite'}</div>
   <div class="field-row"><label>Zinssatz p.a.</label><button class="sl-btn" onclick="stepMaster('zins',-0.1)">−</button><input type="range" id="msl-zins" min="0.5" max="8" step="0.1" value="${masterZins}" oninput="syncM('zins',this.value)"><button class="sl-btn" onclick="stepMaster('zins',0.1)">+</button><span class="val-badge" id="mlbl-zins" onclick="mkMasterEdit(this,'zins')">${fmtP(masterZins)}</span></div>
   <div class="field-row"><label>Tilgung p.a. (%)</label><button class="sl-btn" onclick="stepMaster('tilgPct',-0.1)">−</button><input type="range" id="msl-tilgPct" min="0.5" max="6" step="0.1" value="${masterTilgPct}" oninput="syncM('tilgPct',this.value)"><button class="sl-btn" onclick="stepMaster('tilgPct',0.1)">+</button><span class="val-badge" id="mlbl-tilgPct" onclick="mkMasterEdit(this,'tilgPct')">${fmtP(masterTilgPct)}</span></div>
   <div class="field-row"><label>Tilgung / Monat (€)</label><button class="sl-btn" onclick="stepMaster('tilgEuro',-50)">−</button><input type="range" id="msl-tilgEuro" min="0" max="5000" step="50" value="${initE}" oninput="syncM('tilgEuro',this.value)"><button class="sl-btn" onclick="stepMaster('tilgEuro',50)">+</button><span class="val-badge" id="mlbl-tilgEuro" onclick="mkMasterEdit(this,'tilgEuro')">${fmtE(initE)}</span></div>
@@ -1431,6 +1528,18 @@ function buildMasterCard(){
   wrap.appendChild(div);
 }
 
+function toggleMasterFixed(checked){
+  if(checked){
+    masterFixedBetrag=calcMasterBetrag(); // aktuellen Betrag einfrieren
+    masterFixed=true;
+  }else{
+    masterFixed=false;masterFixedBetrag=null;
+  }
+  buildMasterCard();
+  calc();
+  scheduleAutoSave();
+}
+
 function syncM(field,val){
   const v=parseFloat(val);
   if(field==='zins')masterZins=v;
@@ -1440,6 +1549,7 @@ function syncM(field,val){
   const lb=document.getElementById('mlbl-'+field);
   if(lb&&!lb.matches('input'))lb.textContent=field==='laufzeit'?v+' Jahre':field==='tilgEuro'?fmtE(v):fmtP(v);
   calc();
+  scheduleAutoSave();
 }
 function syncKr(kId,field,val){
   const k=kredite.find(x=>x.id===kId);if(!k)return;
@@ -1450,6 +1560,7 @@ function syncKr(kId,field,val){
   const lb=document.getElementById('klbl-'+kId+'-'+field);
   if(lb&&!lb.matches('input'))lb.textContent=field==='laufzeit'?v+' Jahre':(field==='zins'||field==='tilgPct')?fmtP(v):fmtE(v);
   calc();
+  scheduleAutoSave();
 }
 
 let aktivePrios=new Set([1,2,3]);
@@ -1459,6 +1570,7 @@ function togglePrio(p){
   const btn=document.getElementById('pf-'+p);
   if(btn)btn.classList.toggle('active',aktivePrios.has(p));
   renderGewerke();calc();
+  scheduleAutoSave();
 }
 
 function renderGewerke(){
@@ -1551,7 +1663,7 @@ function renderGewerke(){
       chip.href=doc.url;chip.target='_blank';chip.rel='noopener';
       chip.innerHTML=`<span class="doc-icon">${docIcon(doc.url)}</span><span class="doc-name">${doc.name||doc.url}</span>`;
       const del=document.createElement('button');del.className='doc-del';del.textContent='×';del.title='Entfernen';
-      del.onclick=function(e){e.preventDefault();e.stopPropagation();g.docs.splice(di,1);renderGewerke();};
+      del.onclick=function(e){e.preventDefault();e.stopPropagation();g.docs.splice(di,1);renderGewerke();markDirty();};
       chip.appendChild(del);
       docsBox.appendChild(chip);
     });
@@ -1630,21 +1742,21 @@ function buildPayBox(g){
 
       const dInp=document.createElement('input');dInp.type='date';dInp.className='pay-edit-date';
       dInp.value=p.datum||'';
-      dInp.addEventListener('change',function(){p.datum=this.value;updatePayBox(g.id);});
+      dInp.addEventListener('change',function(){p.datum=this.value;updatePayBox(g.id);markDirty();});
 
       const lInp=document.createElement('input');lInp.type='text';lInp.className='pay-edit-label';
       lInp.value=p.label||'';lInp.placeholder='Bezeichnung';
-      lInp.addEventListener('input',function(){p.label=this.value;});
+      lInp.addEventListener('input',function(){p.label=this.value;markDirty();});
 
       const aWrap=document.createElement('div');aWrap.className='pay-edit-amt-wrap';
       const aInp=document.createElement('input');aInp.type='number';aInp.className='pay-edit-amt';
       aInp.value=p.betrag||'';aInp.min='0';aInp.step='100';
-      aInp.addEventListener('input',function(){p.betrag=parseFloat(this.value)||0;updatePayBarOnly(g.id);});
+      aInp.addEventListener('input',function(){p.betrag=parseFloat(this.value)||0;updatePayBarOnly(g.id);markDirty();});
       const eur=document.createElement('span');eur.className='pay-edit-eur';eur.textContent='€';
       aWrap.appendChild(aInp);aWrap.appendChild(eur);
 
       const pdel=document.createElement('button');pdel.className='pay-del';pdel.textContent='×';pdel.title='Löschen';
-      pdel.onclick=function(){g.payments.splice(pi,1);renderGewerke();calc();};
+      pdel.onclick=function(){g.payments.splice(pi,1);renderGewerke();calc();markDirty();};
 
       prow.appendChild(dInp);prow.appendChild(lInp);prow.appendChild(aWrap);prow.appendChild(pdel);
       hist.appendChild(prow);
@@ -1889,7 +2001,7 @@ function calc(){
   const gw=gewerke.filter(g=>aktivePrios.has(g.prio)).reduce((s,g)=>s+(parseFloat(g.betrag)||0),0);
   document.getElementById('gewerk-total').textContent=fmtE(gw);
   const inv=kp*(1+nkR)+gw,zk=kredite.reduce((s,k)=>s+(parseFloat(k.betrag)||0),0);
-  const mb=Math.max(0,inv-eg-zk);
+  const mb=(masterFixed&&masterFixedBetrag!=null)?masterFixedBetrag:Math.max(0,inv-eg-zk);
   const disp=document.getElementById('master-betrag-display');if(disp)disp.textContent=fmtE(mb);
 
   const mTP=masterTilgMode==='euro'?(mb>0?Math.min(6,Math.max(0.5,parseFloat((masterTilgEuroVal*12/mb*100).toFixed(2)))):masterTilgPct):masterTilgPct;

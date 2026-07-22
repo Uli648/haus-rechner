@@ -1377,6 +1377,7 @@ function stepSlider(id,step){
   const lb=document.getElementById('lbl-'+id);
   if(lb&&!lb.matches('input'))lb.textContent=['nk','afa-ant','rueck','leerstand'].includes(id)?fmtP(v):fmtE(v);
   calc();
+  scheduleAutoSave();
 }
 function stepMaster(field,step){
   const sl=document.getElementById('msl-'+field);if(!sl)return;

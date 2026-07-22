@@ -307,31 +307,18 @@ table.plan tr:hover td{background:rgba(255,255,255,0.02)}
 .role-admin{background:rgba(52,199,89,0.15);color:var(--green);border:1px solid rgba(52,199,89,0.3)}
 .role-reader{background:rgba(255,159,10,0.15);color:var(--amber);border:1px solid rgba(255,159,10,0.3)}
 .topbar-actions{display:flex;align-items:center;gap:10px}
-/* Leser-Modus: Bearbeiten-Elemente sperren */
+/* Leser-Modus (Sandbox): darf Werte ändern + Gewerke/Kredite anlegen zum Durchspielen, aber nicht speichern/hochladen/löschen */
 body.reader-mode .sidebar-new,
 body.reader-mode .sidebar-save,
 body.reader-mode .sidebar-excel,
 body.reader-mode .sidebar-import,
-body.reader-mode .add-btn,
 body.reader-mode .doc-add,
-body.reader-mode .pay-add,
-body.reader-mode .rm-btn,
 body.reader-mode .doc-del,
+body.reader-mode .pay-add,
 body.reader-mode .pay-del,
-body.reader-mode .gw-arrows,
-body.reader-mode .prio-badge,
-body.reader-mode .sl-btn,
+body.reader-mode .rm-btn,
 body.reader-mode .plan-del{display:none !important}
-body.reader-mode input[type=range]{pointer-events:none;opacity:0.6}
-body.reader-mode .gw-name,
-body.reader-mode .gw-amt,
-body.reader-mode .aus-name,
-body.reader-mode .aus-amt,
-body.reader-mode .pay-edit-date,
-body.reader-mode .pay-edit-label,
-body.reader-mode .pay-edit-amt,
-body.reader-mode .val-badge{pointer-events:none}
-body.reader-mode .val-badge{cursor:default}
+/* .add-btn (Gewerk/Kredit hinzufügen) bleibt für Leser sichtbar — Durchspielen erlaubt, wird nicht gespeichert */
 .sidebar-empty{padding:12px 18px;font-size:12px;color:var(--text3);font-style:italic}
 .app-content{flex:1;min-width:0}
 .pw-step.hidden{display:none}
@@ -425,6 +412,8 @@ body.reader-mode .val-badge{cursor:default}
       <div class="plan-titlebar">
         <h1 id="plan-title" onclick="renamePlan()">Ihre Immobilienfinanzierung<span class="edit-hint">✎</span></h1>
         <p class="plan-subtitle" id="plan-subtitle">Professionelle Investmentanalyse auf einen Blick</p>
+        <p id="last-modified" style="display:none;font-size:11px;color:var(--text3);margin:2px 0 0"></p>
+        <div id="sandbox-banner" style="display:none;margin:10px auto 0;max-width:520px;background:rgba(255,159,10,0.12);border:1px solid rgba(255,159,10,0.3);border-radius:10px;padding:8px 14px;font-size:12px;color:var(--amber)">🔎 Ansichts-Modus — Sie können Werte durchspielen, Änderungen werden aber nicht gespeichert.</div>
         <div class="cashflow-strip" id="cf-strip"></div>
       </div>
       <div class="main">
@@ -562,9 +551,10 @@ body.reader-mode .val-badge{cursor:default}
 <div class="modal-bg" id="save-name-modal">
   <div class="modal">
     <button class="modal-close" onclick="closeModal('save-name-modal')">×</button>
-    <h3>Plan benennen</h3>
-    <p>Geben Sie diesem Finanzierungsplan einen Namen.</p>
-    <input type="text" id="plan-name-input" placeholder="z.B. Hauptstraße 12, München" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px;font-size:14px;color:var(--text);outline:none;font-family:inherit;margin-bottom:16px">
+    <h3>Plan speichern</h3>
+    <p>Name des Plans und Ihr Name (für das Änderungs-Protokoll).</p>
+    <input type="text" id="plan-name-input" placeholder="Plan-Name — z.B. Hauptstraße 12" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px;font-size:14px;color:var(--text);outline:none;font-family:inherit;margin-bottom:10px">
+    <input type="text" id="editor-name-input" placeholder="Ihr Name — z.B. Uli" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:12px;font-size:14px;color:var(--text);outline:none;font-family:inherit;margin-bottom:16px">
     <div class="modal-actions">
       <button class="tb-btn primary" onclick="confirmSavePlan()">Speichern</button>
       <button class="tb-btn" onclick="closeModal('save-name-modal')">Abbrechen</button>
@@ -619,6 +609,8 @@ try{sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);}catch(e){console
 
 // Rollen: 'admin' (Vollzugriff) oder 'leser' (nur ansehen)
 let userRole=null;
+let editorName=sessionStorage.getItem('editor_name')||'';
+let _loadingState=false;
 function isAdmin(){return userRole==='admin';}
 function isReader(){return userRole==='leser';}
 
@@ -627,6 +619,9 @@ function setCloudStatus(txt,color){
   const el=document.getElementById('cloud-status');
   if(el){el.textContent=txt;el.style.color=color||'var(--text3)';}
 }
+function markSaved(){setCloudStatus('● Gespeichert','var(--green)');}
+function markDirty(){if(isAdmin()&&activePlanId)setCloudStatus('○ Nicht gespeichert','var(--amber)');}
+function markSaving(){setCloudStatus('◌ Speichert…','var(--text3)');}
 
 /* Pläne aus der Cloud laden (mit localStorage-Cache als Fallback) */
 async function cloudGetPlans(typ){
@@ -634,8 +629,7 @@ async function cloudGetPlans(typ){
   try{
     const{data,error}=await sb.from('plaene').select('*').eq('typ',typ).order('geaendert_am',{ascending:true});
     if(error)throw error;
-    // Cache
-    const mapped=data.map(r=>({id:r.id,name:r.name,state:r.daten}));
+    const mapped=data.map(r=>({id:r.id,name:r.name,state:r.daten,geaendert_am:r.geaendert_am}));
     localStorage.setItem(typ==='finanz'?'fin_plans_cache':'hh_plans_cache',JSON.stringify(mapped));
     return mapped;
   }catch(e){
@@ -648,11 +642,12 @@ function getPlansLocal(typ){
   try{return JSON.parse(localStorage.getItem(typ==='finanz'?'fin_plans_cache':'hh_plans_cache')||'[]');}catch{return[];}
 }
 
-/* Plan speichern/aktualisieren in Cloud */
+/* Plan speichern/aktualisieren in Cloud — mit Bearbeiter-Name */
 async function cloudSavePlan(typ,id,name,state){
   if(!sb)throw new Error('Keine Cloud-Verbindung');
+  // Bearbeiter-Info in die Daten einbetten
+  state={...state,_editor:editorName||'—',_editedAt:new Date().toISOString()};
   if(id&&!String(id).startsWith('plan_')&&!String(id).startsWith('hh_')){
-    // existierender UUID → update
     const{error}=await sb.from('plaene').update({name,daten:state}).eq('id',id);
     if(error)throw error;
     return id;
@@ -702,10 +697,10 @@ function checkPw(){
       document.getElementById('lock-screen').style.display='none';
       document.getElementById('app').style.display='block';
       applyRoleUI();
-      setCloudStatus('☁ Lädt…','var(--text3)');
+      setCloudStatus('◌ Lädt…','var(--text3)');
       await renderSidebar();
       await loadAutoSave();
-      setCloudStatus(sb?'☁ Synchron':'⚠ Offline','var(--text3)');
+      if(!activePlanId)setCloudStatus(sb?'':'⚠ Offline','var(--text3)');
     },700);
   } else {
     document.getElementById('lock-err').textContent='Falsches Passwort.';
@@ -717,7 +712,7 @@ function checkPw(){
   }
 }
 
-// Leser-Modus: alle Bearbeiten-Elemente sperren
+// Rollen-UI setzen
 function applyRoleUI(){
   const ro=isReader();
   document.body.classList.toggle('reader-mode',ro);
@@ -726,6 +721,8 @@ function applyRoleUI(){
     badge.textContent=isAdmin()?'Admin':'Nur Ansicht';
     badge.className='role-badge '+(isAdmin()?'role-admin':'role-reader');
   }
+  const banner=document.getElementById('sandbox-banner');
+  if(banner)banner.style.display=ro?'block':'none';
 }
 document.getElementById('pw-input').addEventListener('keydown',e=>{if(e.key==='Enter')checkPw();});
 document.getElementById('pw-input').addEventListener('focus',()=>{const r=document.getElementById('lock-ring');if(r&&!r.classList.contains('active'))r.style.opacity='0.9';});
@@ -758,6 +755,19 @@ function setPlanTitle(name){
   if(s)s.style.display='none';
 }
 
+function showLastModified(state){
+  const el=document.getElementById('last-modified');
+  if(!el)return;
+  const ed=state&&state._editor;
+  const at=state&&state._editedAt;
+  if(ed&&ed!=='—'){
+    let dstr='';
+    if(at){try{const d=new Date(at);dstr=d.toLocaleDateString('de-DE')+' um '+d.toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})+' Uhr';}catch{}}
+    el.textContent='Zuletzt geändert von '+ed+(dstr?' · '+dstr:'');
+    el.style.display='block';
+  }else{el.style.display='none';}
+}
+
 function renamePlan(){
   if(!isAdmin())return;
   const h=document.getElementById('plan-title');
@@ -779,11 +789,11 @@ function renamePlan(){
     if(!name){restore(current);return;}
     restore(name);
     try{
-      setCloudStatus('☁ Speichert…','var(--text3)');
+      markSaving();
       const id=await cloudSavePlan('finanz',activePlanId,name,getState());
       activePlanId=id;
       await renderSidebar();
-      setCloudStatus('☁ Synchron','var(--text3)');
+      markSaved();
     }catch(e){setCloudStatus('⚠ Fehler','var(--red)');console.warn(e);}
   }
   inp.addEventListener('blur',commit);
@@ -837,8 +847,10 @@ function saveCurrentPlan(){
   if(inp){
     const existing=activePlanId?getPlans().find(p=>p.id===activePlanId):null;
     inp.value=existing?existing.name:'';
-    inp.onkeydown=e=>{if(e.key==='Enter')confirmSavePlan();};
+    inp.onkeydown=e=>{if(e.key==='Enter')document.getElementById('editor-name-input').focus();};
   }
+  const ein=document.getElementById('editor-name-input');
+  if(ein){ein.value=editorName||'';ein.onkeydown=e=>{if(e.key==='Enter')confirmSavePlan();};}
   document.getElementById('save-name-modal').classList.add('open');
   setTimeout(()=>{const i=document.getElementById('plan-name-input');if(i)i.focus();},100);
 }
@@ -846,14 +858,18 @@ function saveCurrentPlan(){
 async function confirmSavePlan(){
   const name=(document.getElementById('plan-name-input').value||'').trim();
   if(!name)return;
+  const ed=(document.getElementById('editor-name-input').value||'').trim();
+  if(!ed){document.getElementById('editor-name-input').focus();return;}
+  editorName=ed;sessionStorage.setItem('editor_name',ed);
   closeModal('save-name-modal');
   try{
-    setCloudStatus('☁ Speichert…','var(--text3)');
+    markSaving();
     const id=await cloudSavePlan('finanz',activePlanId,name,getState());
     activePlanId=id;
     setPlanTitle(name);
+    showLastModified({_editor:editorName,_editedAt:new Date().toISOString()});
     await renderSidebar();
-    setCloudStatus('☁ Synchron','var(--text3)');
+    markSaved();
   }catch(e){setCloudStatus('⚠ Fehler beim Speichern','var(--red)');console.warn(e);alert('Speichern fehlgeschlagen: '+e.message);}
 }
 
@@ -864,8 +880,10 @@ async function loadPlan(id){
   activePlanId=id;
   applyState(plan.state);
   setPlanTitle(plan.name);
+  showLastModified(plan.state);
   await renderSidebar();
   closeSidebar();
+  if(isAdmin())markSaved();else setCloudStatus('',null);
 }
 
 async function deletePlan(id){
@@ -922,6 +940,7 @@ async function loadAutoSave(){
   }
 }
 function applyState(s){
+  _loadingState=true;
   try{
     const d=(typeof s==='string')?JSON.parse(s):s;
     const map={kaufpreis:'kaufpreis',eigen:'eigen',nk:'nk','afa-ant':'afaAnt',miete:'miete',rueck:'rueck',leerstand:'leerstand'};
@@ -946,6 +965,7 @@ function applyState(s){
     (d.kredite||[]).forEach(k=>addKredit(k.label,k.betrag,k.zins,k.tilgPct,k.laufzeit));
     calc();
   }catch(e){console.error('applyState error:',e);}
+  _loadingState=false;
 }
 function closeModal(id){document.getElementById(id).classList.remove('open');}
 document.querySelectorAll('.modal-bg').forEach(m=>m.addEventListener('click',function(e){if(e.target===this)this.classList.remove('open');}));
@@ -1688,9 +1708,14 @@ async function confirmUploadDoc(input){
 async function autoSaveIfActive(){
   if(!isAdmin()||!activePlanId||!sb)return;
   try{
+    markSaving();
     const name=getPlans().find(p=>p.id===activePlanId)?.name;
-    if(name){await cloudSavePlan('finanz',activePlanId,name,getState());setCloudStatus('☁ Synchron','var(--text3)');}
-  }catch(e){console.warn('autosave',e);}
+    if(name){
+      await cloudSavePlan('finanz',activePlanId,name,getState());
+      if(editorName)showLastModified({_editor:editorName,_editedAt:new Date().toISOString()});
+      markSaved();
+    }
+  }catch(e){console.warn('autosave',e);setCloudStatus('⚠ Nicht gespeichert','var(--red)');}
 }
 
 function addGewerk(name='',betrag=0,prio=1,docs=[],payments=[],budgetOrig=undefined){
@@ -1702,6 +1727,7 @@ function addGewerk(name='',betrag=0,prio=1,docs=[],payments=[],budgetOrig=undefi
     if(ni)ni.focus();
   }
   calc();
+  scheduleAutoSave();
 }
 
 let _payTargetGw=null;
@@ -1833,9 +1859,10 @@ function addKredit(label='',betrag=0,zins=2.0,tilgPct=2.0,laufzeit=20){
   <div class="field-row"><label>Laufzeit</label><button class="sl-btn" onclick="stepKr(${id},'laufzeit',-1)">−</button><input type="range" id="ksl-${id}-laufzeit" min="5" max="40" step="1" value="${laufzeit}" oninput="syncKr(${id},'laufzeit',this.value)"><button class="sl-btn" onclick="stepKr(${id},'laufzeit',1)">+</button><span class="val-badge" id="klbl-${id}-laufzeit" style="min-width:90px" onclick="mkKreditEdit(this,${id},'laufzeit')">${laufzeit} Jahre</span></div>
   <div class="kr-detail" id="kr-detail-${id}"></div>`;
   document.getElementById('kredite-list').appendChild(w);calc();
+  scheduleAutoSave();
 }
-function updKr(id,f,v){const k=kredite.find(x=>x.id===id);if(k){k[f]=v;calc();}}
-function rmKr(id){kredite=kredite.filter(x=>x.id!==id);document.getElementById('kr-'+id)?.remove();calc();}
+function updKr(id,f,v){const k=kredite.find(x=>x.id===id);if(k){k[f]=v;calc();scheduleAutoSave();}}
+function rmKr(id){kredite=kredite.filter(x=>x.id!==id);document.getElementById('kr-'+id)?.remove();calc();scheduleAutoSave();}
 
 function renderKrDetail(elId,betrag,zins,tilgPct,laufzeit){
   const el=document.getElementById(elId);if(!el)return;
@@ -2024,7 +2051,8 @@ resetPwSteps();
 
 let _autoSaveTimer=null;
 function scheduleAutoSave(){
-  if(!isAdmin()||!activePlanId)return;
+  if(_loadingState||!isAdmin()||!activePlanId)return;
+  markDirty();
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer=setTimeout(autoSaveIfActive,1200);
 }

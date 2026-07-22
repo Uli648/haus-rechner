@@ -619,9 +619,13 @@ function setCloudStatus(txt,color){
   const el=document.getElementById('cloud-status');
   if(el){el.textContent=txt;el.style.color=color||'var(--text3)';}
 }
-function markSaved(){setCloudStatus('● Gespeichert','var(--green)');}
-function markDirty(){if(isAdmin()&&activePlanId)setCloudStatus('○ Nicht gespeichert','var(--amber)');}
+function markSaved(){_isDirty=false;setCloudStatus('● Gespeichert','var(--green)');}
+function markDirty(){if(isAdmin()&&activePlanId){_isDirty=true;setCloudStatus('○ Nicht gespeichert','var(--amber)');}}
 function markSaving(){setCloudStatus('◌ Speichert…','var(--text3)');}
+let _isDirty=false;
+window.addEventListener('beforeunload',function(e){
+  if(_isDirty&&isAdmin()){e.preventDefault();e.returnValue='';}
+});
 
 /* Pläne aus der Cloud laden (mit localStorage-Cache als Fallback) */
 async function cloudGetPlans(typ){
@@ -1682,7 +1686,7 @@ function confirmAddDoc(){
   if(!url){document.getElementById('doc-url-input').focus();return;}
   const name=document.getElementById('doc-name-input').value.trim();
   const g=gewerke.find(x=>x.id===_docTargetGw);
-  if(g){if(!g.docs)g.docs=[];g.docs.push({url,name});renderGewerke();autoSaveIfActive();}
+  if(g){if(!g.docs)g.docs=[];g.docs.push({url,name});renderGewerke();markDirty();}
   closeModal('doc-modal');
 }
 async function confirmUploadDoc(input){
@@ -1696,7 +1700,7 @@ async function confirmUploadDoc(input){
   try{
     const g=gewerke.find(x=>x.id===_docTargetGw);
     const doc=await cloudUploadDoc(file,g?g.name:'gewerk');
-    if(g){if(!g.docs)g.docs=[];g.docs.push(doc);renderGewerke();autoSaveIfActive();}
+    if(g){if(!g.docs)g.docs=[];g.docs.push(doc);renderGewerke();markDirty();}
     st.style.color='var(--green)';st.textContent='✓ Hochgeladen.';
     setTimeout(()=>closeModal('doc-modal'),700);
   }catch(e){
@@ -1705,19 +1709,6 @@ async function confirmUploadDoc(input){
   }
 }
 // Auto-Speichern bei aktivem Plan (nur Admin)
-async function autoSaveIfActive(){
-  if(!isAdmin()||!activePlanId||!sb)return;
-  try{
-    markSaving();
-    const name=getPlans().find(p=>p.id===activePlanId)?.name;
-    if(name){
-      await cloudSavePlan('finanz',activePlanId,name,getState());
-      if(editorName)showLastModified({_editor:editorName,_editedAt:new Date().toISOString()});
-      markSaved();
-    }
-  }catch(e){console.warn('autosave',e);setCloudStatus('⚠ Nicht gespeichert','var(--red)');}
-}
-
 function addGewerk(name='',betrag=0,prio=1,docs=[],payments=[],budgetOrig=undefined){
   const id=++gkId;
   gewerke.push({id,name,betrag,prio,docs:docs||[],payments:payments||[],budgetOrig:budgetOrig!==undefined?budgetOrig:(parseFloat(betrag)||0)});
@@ -1747,7 +1738,7 @@ function confirmAddPay(){
   const label=document.getElementById('pay-label-input').value.trim()||'Zahlung';
   const datum=document.getElementById('pay-datum-input').value||'';
   const g=gewerke.find(x=>x.id===_payTargetGw);
-  if(g){if(!g.payments)g.payments=[];g.payments.push({betrag,label,datum});g._histOpen=true;renderGewerke();calc();autoSaveIfActive();}
+  if(g){if(!g.payments)g.payments=[];g.payments.push({betrag,label,datum});g._histOpen=true;renderGewerke();calc();markDirty();}
   closeModal('pay-modal');
 }
 
@@ -2049,12 +2040,10 @@ buildMasterCard();
 calc();
 resetPwSteps();
 
-let _autoSaveTimer=null;
+// Manuelles Speichern: Änderungen markieren als "nicht gespeichert", aber NICHT automatisch in die Cloud schreiben
 function scheduleAutoSave(){
   if(_loadingState||!isAdmin()||!activePlanId)return;
   markDirty();
-  clearTimeout(_autoSaveTimer);
-  _autoSaveTimer=setTimeout(autoSaveIfActive,1200);
 }
 
 ['kaufpreis','eigen','nk','afa-ant','miete','rueck','leerstand'].forEach(id=>{
